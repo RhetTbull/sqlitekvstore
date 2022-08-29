@@ -6,4 +6,4 @@ __pycache__
 .vscode/
 .python-version
 build/
-dist/
+dist/.coverage
