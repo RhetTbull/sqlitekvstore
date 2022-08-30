@@ -24,7 +24,8 @@ class SqliteKeyValueStore:
             dbpath: path to the database
             serialize: optional function to serialize values on set
             deserialize: optional function to deserialize values on get
-            wal: enable write-ahead logging which may offer significant speed boost; once enabled, WAL mode will not be disabled, even if wal=False
+            wal: enable write-ahead logging which may offer significant speed boost;
+                once enabled, WAL mode will not be disabled, even if wal=False
         """
 
         if serialize and not callable(serialize):
@@ -52,7 +53,7 @@ class SqliteKeyValueStore:
         cursor = conn.cursor()
         cursor.execute(
             """CREATE TABLE IF NOT EXISTS about (
-                id INTEGER PRIMARY KEY, 
+                id INTEGER PRIMARY KEY,
                 description TEXT);
             """
         )
