@@ -131,7 +131,7 @@ Contributions are welcome. Please open an issue or pull request if you find a bu
 
 ### Installation for Contributors
 
-`git clone TODO:Repo here`
+`git clone git@github.com:RhetTbull/sqlitekvstore.git`
 `pip install poetry`
 `poetry install`
 `poetry run pytest --mypy --cov --doctest-glob="README.md"`
