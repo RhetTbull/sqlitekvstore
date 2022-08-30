@@ -31,6 +31,8 @@ Copy `sqlitekvstore.py` to your python path and import it.
 
 ### Context Manager
 
+You can use SqliteKeyValueStore as a context manager to automatically close the database when you're done with it. If you don't do this, you'll need to call `close()` yourself.
+
 Note: You can set `wal=True` to enable [Sqlite WAL mode](https://www.sqlite.org/wal.html) which will provide much better performance, particularly when writing a lot of key/value pairs.
 
 ```pycon
