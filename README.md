@@ -133,10 +133,10 @@ Contributions are welcome. Please open an issue or pull request if you find a bu
 
 ### Installation for Contributors
 
-`git clone git@github.com:RhetTbull/sqlitekvstore.git`
-`pip install poetry`
-`poetry install`
-`black sqlitekvstore.py`
-`flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics`
-`flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics`
-`poetry run pytest --mypy --cov --doctest-glob="README.md"`
+* `git clone git@github.com:RhetTbull/sqlitekvstore.git`
+* `pip install poetry`
+* `poetry install`
+* `black sqlitekvstore.py`
+* `flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics`
+* `flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics`
+* `poetry run pytest --mypy --cov --doctest-glob="README.md"`
