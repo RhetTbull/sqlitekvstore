@@ -80,8 +80,8 @@ qux baz
 ```
 
 ### Custom Value Types
- 
-Keys must be a type supported by sqlite (strings, bytes, integers, or floats). Values can be any type as long as you provide a serializer/deserializer function. Here's an example using JSON:
+
+Keys must be a type supported by sqlite (strings, bytes, integers, or floats). Values can be any type as long as you provide a serializer/deserializer function that converts your values to an appropriate type. Here's an example using JSON:
 
 ```pycon
 >>> from sqlitekvstore import SqliteKeyValueStore
@@ -112,6 +112,7 @@ datetime.datetime(2022, 8, 30, 0, 0)
 * Keys must be unique.
 * Values must be a type directly supported by sqlite, e.g. strings, bytes, integers, or floats however you may be provide a custom serializer/deserializer to serialize/deserialize your values to `SqliteKeyValueStore.__init__()` and this will be used for all operations.
 * Keys and values are stored using using sqlite's `BLOB` type.
+* There is only a single data table.  To use multiple tables, you would need to create a new `SqliteKeyValueStore` instance for each table.
 * To keep the database a single file, WAL mode is not enabled by default. If you need to store many keys, you should enable WAL mode which will significantly improve performance but will also create additional journal files for your database.
 
 ## Testing
@@ -127,3 +128,12 @@ Licensed under the MIT License.
 ## Contributing
 
 Contributions are welcome. Please open an issue or pull request if you find a bug or want to contribute.
+
+### Installation for Contributors
+
+`git clone TODO:Repo here`
+`pip install poetry`
+`poetry install`
+`poetry run pytest --mypy --cov --doctest-glob="README.md"`
+
+Format code with [black](https://black.readthedocs.io/en/stable/).
