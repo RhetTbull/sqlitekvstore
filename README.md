@@ -1,6 +1,6 @@
 # Sqlite Key Value Store
 
-This is a simple key value store backed by sqlite. It is intended for cases where you need to persistently store small amounts of data.
+This is a simple key value store backed by sqlite. It is intended for cases where you need to persistently store small amounts of data. All code is dependency free and contained in a single file.  100% test coverage and 100% mypy type checking.
 
 ## Rationale
 
