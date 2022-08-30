@@ -41,7 +41,7 @@ def unzip_and_unpickle(data: bytes) -> Any:
 def test_basic_get_set(tmpdir):
     """Test basic functionality"""
     dbpath = tmpdir / "kvtest.db"
-    kvstore = sqlitekvstore.Sqlite3KeyValueStore(dbpath)
+    kvstore = sqlitekvstore.SqliteKeyValueStore(dbpath)
     kvstore.set("foo", "bar")
     assert kvstore.get("foo") == "bar"
     assert kvstore.get("FOOBAR") is None
@@ -61,7 +61,7 @@ def test_basic_get_set(tmpdir):
 def test_basic_get_set_wal(tmpdir):
     """Test basic functionality with WAL mode"""
     dbpath = tmpdir / "kvtest.db"
-    kvstore = sqlitekvstore.Sqlite3KeyValueStore(dbpath, wal=True)
+    kvstore = sqlitekvstore.SqliteKeyValueStore(dbpath, wal=True)
     kvstore.set("foo", "bar")
     assert kvstore.get("foo") == "bar"
     assert kvstore.get("FOOBAR") is None
@@ -82,7 +82,7 @@ def test_basic_context_handler(tmpdir):
     """Test basic functionality with context handler"""
 
     dbpath = tmpdir / "kvtest.db"
-    with sqlitekvstore.Sqlite3KeyValueStore(dbpath) as kvstore:
+    with sqlitekvstore.SqliteKeyValueStore(dbpath) as kvstore:
         kvstore.set("foo", "bar")
         assert kvstore.get("foo") == "bar"
         assert kvstore.get("FOOBAR") is None
@@ -98,7 +98,7 @@ def test_basic_context_handler(tmpdir):
 def test_about(tmpdir):
     """Test about property"""
     dbpath = tmpdir / "kvtest.db"
-    with sqlitekvstore.Sqlite3KeyValueStore(dbpath) as kvstore:
+    with sqlitekvstore.SqliteKeyValueStore(dbpath) as kvstore:
         kvstore.about = "My description"
         assert kvstore.about == "My description"
         kvstore.about = "My new description"
@@ -108,19 +108,20 @@ def test_about(tmpdir):
 def test_existing_db(tmpdir):
     """Test that opening an existing database works as expected"""
     dbpath = tmpdir / "kvtest.db"
-    with sqlitekvstore.Sqlite3KeyValueStore(dbpath) as kvstore:
+    with sqlitekvstore.SqliteKeyValueStore(dbpath) as kvstore:
         kvstore.set("foo", "bar")
 
-    with sqlitekvstore.Sqlite3KeyValueStore(dbpath) as kvstore:
+    with sqlitekvstore.SqliteKeyValueStore(dbpath) as kvstore:
         assert kvstore.get("foo") == "bar"
 
 
 def test_dict_interface(tmpdir):
     """ "Test dict interface"""
     dbpath = tmpdir / "kvtest.db"
-    with sqlitekvstore.Sqlite3KeyValueStore(dbpath) as kvstore:
+    with sqlitekvstore.SqliteKeyValueStore(dbpath) as kvstore:
         kvstore["foo"] = "bar"
         assert kvstore["foo"] == "bar"
+        assert len(kvstore) == 1
         assert kvstore.get("foo") == "bar"
         assert kvstore.pop("foo") == "bar"
         assert kvstore.get("foo") is None
@@ -145,7 +146,7 @@ def test_dict_interface(tmpdir):
 def test_serialize_deserialize(tmpdir):
     """Test serialize/deserialize"""
     dbpath = tmpdir / "kvtest.db"
-    kvstore = sqlitekvstore.Sqlite3KeyValueStore(
+    kvstore = sqlitekvstore.SqliteKeyValueStore(
         dbpath, serialize=json.dumps, deserialize=json.loads
     )
     kvstore.set("foo", {"bar": "baz"})
@@ -156,7 +157,7 @@ def test_serialize_deserialize(tmpdir):
 def test_serialize_deserialize_binary_data(tmpdir):
     """Test serialize/deserialize with binary data"""
     dbpath = tmpdir / "kvtest.db"
-    kvstore = sqlitekvstore.Sqlite3KeyValueStore(
+    kvstore = sqlitekvstore.SqliteKeyValueStore(
         dbpath, serialize=pickle_and_zip, deserialize=unzip_and_unpickle
     )
     kvstore.set("foo", {"bar": "baz"})
@@ -168,27 +169,28 @@ def test_serialize_deserialize_bad_callable(tmpdir):
     """Test serialize/deserialize with bad values"""
     dbpath = tmpdir / "kvtest.db"
     with pytest.raises(TypeError):
-        sqlitekvstore.Sqlite3KeyValueStore(dbpath, serialize=1, deserialize=None)
+        sqlitekvstore.SqliteKeyValueStore(dbpath, serialize=1, deserialize=None)
 
     with pytest.raises(TypeError):
-        sqlitekvstore.Sqlite3KeyValueStore(dbpath, serialize=None, deserialize=1)
+        sqlitekvstore.SqliteKeyValueStore(dbpath, serialize=None, deserialize=1)
 
 
 def test_iter(tmpdir):
     """Test generator behavior"""
     dbpath = tmpdir / "kvtest.db"
-    kvstore = sqlitekvstore.Sqlite3KeyValueStore(dbpath)
+    kvstore = sqlitekvstore.SqliteKeyValueStore(dbpath)
     kvstore.set("foo", "bar")
     kvstore.set("baz", "qux")
     kvstore.set("quux", "corge")
     kvstore.set("grault", "garply")
+    assert len(kvstore) == 4
     assert sorted(iter(kvstore)) == ["baz", "foo", "grault", "quux"]
 
 
 def test_keys_values_items(tmpdir):
     """Test keys, values, items"""
     dbpath = tmpdir / "kvtest.db"
-    kvstore = sqlitekvstore.Sqlite3KeyValueStore(dbpath)
+    kvstore = sqlitekvstore.SqliteKeyValueStore(dbpath)
     kvstore.set("foo", "bar")
     kvstore.set("baz", "qux")
     kvstore.set("quux", "corge")

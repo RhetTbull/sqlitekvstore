@@ -8,7 +8,7 @@ from typing import Callable, Generator, Optional, Tuple, TypeVar
 T = TypeVar("T")
 
 
-class Sqlite3KeyValueStore:
+class SqliteKeyValueStore:
     """Simple Key-Value Store that uses sqlite3 database as backend"""
 
     def __init__(
@@ -58,7 +58,7 @@ class Sqlite3KeyValueStore:
         )
         cursor.execute(
             """CREATE TABLE IF NOT EXISTS
-            data (key BLOB, value BLOB);"""
+            data (key BLOB PRIMARY KEY NOT NULL, value BLOB);"""
         )
         cursor.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_key ON data (key);")
         conn.commit()
@@ -193,3 +193,9 @@ class Sqlite3KeyValueStore:
 
     def __exit__(self, exc_type, exc_value, exc_traceback):
         self.close()
+
+    def __len__(self):
+        conn = self.connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT COUNT(*) FROM data;")
+        return cursor.fetchone()[0]
