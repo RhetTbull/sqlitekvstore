@@ -123,6 +123,10 @@ def test_dict_interface(tmpdir):
         assert kvstore["foo"] == "bar"
         assert len(kvstore) == 1
         assert kvstore.get("foo") == "bar"
+
+        assert "foo" in kvstore
+        assert "FOOBAR" not in kvstore
+
         assert kvstore.pop("foo") == "bar"
         assert kvstore.get("foo") is None
 

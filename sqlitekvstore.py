@@ -54,7 +54,7 @@ class SQLiteKeyValueStore:
         conn = sqlite3.Connection(dbpath)
         cursor = conn.cursor()
         cursor.execute(
-            """CREATE TABLE IF NOT EXISTS about (
+            """CREATE TABLE IF NOT EXISTS _about (
                 id INTEGER PRIMARY KEY,
                 description TEXT);
             """
@@ -137,7 +137,7 @@ class SQLiteKeyValueStore:
         results = (
             self.connection()
             .cursor()
-            .execute("SELECT description FROM about;")
+            .execute("SELECT description FROM _about;")
             .fetchone()
         )
         return results[0] if results else ""
@@ -148,7 +148,7 @@ class SQLiteKeyValueStore:
         conn = self.connection()
         cursor = conn.cursor()
         cursor.execute(
-            "INSERT OR REPLACE INTO about VALUES (?, ?);",
+            "INSERT OR REPLACE INTO _about VALUES (?, ?);",
             (
                 1,
                 description,
@@ -158,8 +158,7 @@ class SQLiteKeyValueStore:
 
     def _get(self, key: T) -> T:
         """Get value for key or raise KeyError if key not found"""
-        conn = self.connection()
-        cursor = conn.cursor()
+        cursor = self.connection().cursor()
         cursor.execute("SELECT value FROM data WHERE key = ?;", (key,))
         if result := cursor.fetchone():
             return self._deserialize(result[0])
@@ -181,15 +180,22 @@ class SQLiteKeyValueStore:
 
     def __delitem__(self, key: T):
         # try to get the key which will raise KeyError if key does not exist
-        self._get(key)
-        self.delete(key)
+        if key in self:
+            self.delete(key)
+        else:
+            raise KeyError(key)
 
     def __iter__(self):
-        conn = self.connection()
-        cursor = conn.cursor()
+        cursor = self.connection().cursor()
         cursor.execute("SELECT key FROM data;")
         for key in cursor:
             yield key[0]
+
+    def __contains__(self, key: T) -> bool:
+        # Implement in operator, don't use _get to avoid deserializing value unnecessarily
+        cursor = self.connection().cursor()
+        cursor.execute("SELECT 1 FROM data WHERE key = ?;", (key,))
+        return bool(cursor.fetchone())
 
     def __enter__(self):
         return self
@@ -198,8 +204,7 @@ class SQLiteKeyValueStore:
         self.close()
 
     def __len__(self):
-        conn = self.connection()
-        cursor = conn.cursor()
+        cursor = self.connection().cursor()
         cursor.execute("SELECT COUNT(*) FROM data;")
         return cursor.fetchone()[0]
 

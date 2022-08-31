@@ -132,6 +132,10 @@ By default, [SQLite WAL mode](https://www.sqlite.org/wal.html) is not enabled. E
 >>> kv.set("foo", "bar")
 >>> kv.get("foo")
 'bar'
+>>> "foo" in kv
+True
+>>> "baz" in kv
+False
 >>> kv.close()
 >>>
 ```
