@@ -70,6 +70,8 @@ def test_basic_get_set_wal(tmpdir):
     kvstore.set("baz", None)
     assert kvstore.get("baz") is None
 
+    kvstore.vacuum()
+
     kvstore.close()
 
     # verify that the connection is closed

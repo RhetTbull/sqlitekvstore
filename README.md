@@ -126,6 +126,19 @@ datetime.datetime(2022, 8, 30, 0, 0)
 >>>
 ```
 
+### Database `.about` Property
+
+`SQLiteKeyValueStore.about` is an optional property that can be used to set/get a description of the database.  This is useful for when you later discover a sqlite database laying around and want to inspect it to know what it was used for.  If not set, `.about` will return an empty string.
+
+```pycon
+>>> from sqlitekvstore import SQLiteKeyValueStore
+>>> kv = SQLiteKeyValueStore("data.db")
+>>> kv.about = "This is my key-value database"
+>>> kv.about
+'This is my key-value database'
+>>>
+```
+
 ### Performance
 
 By default, [SQLite WAL mode](https://www.sqlite.org/wal.html) is not enabled. Enabling this will provide much better performance, particularly when writing a lot of key/value pairs.  You can enable WAL mode by passing `wal=True` to the constructor.  This is not enabled by default because WAL mode causes SQLite to create additional journal files alongside the database file and for simple use cases, I prefer to maintain a single database file.
@@ -151,6 +164,17 @@ As a point of reference, here are the results of inserting and then reading 10,0
     Insert 10000 keys in 2.48 seconds
     Get 10000 keys in 0.14 seconds
     Total 2.62 seconds
+
+### Other Features
+
+If you insert/delete/update *a lot* of keys you may want to vacuum the database to reclaim unused space.  This can be done by calling `vacuum()`.  Reference [SQLite vacuum command](https://www.sqlite.org/lang_vacuum.html).
+
+```pycon
+>>> from sqlitekvstore import SQLiteKeyValueStore
+>>> kv = SQLiteKeyValueStore("data.db")
+>>> kv.vacuum()
+>>>
+```
 
 ## Limitations and Implementation Notes
 

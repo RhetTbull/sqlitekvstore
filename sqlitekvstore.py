@@ -156,6 +156,10 @@ class SQLiteKeyValueStore:
         )
         conn.commit()
 
+    def vacuum(self):
+        """Vacuum the database, ref: https://www.sqlite.org/matrix/lang_vacuum.html"""
+        self.connection().execute("VACUUM;")
+
     def _get(self, key: T) -> T:
         """Get value for key or raise KeyError if key not found"""
         cursor = self.connection().cursor()
