@@ -22,6 +22,10 @@ Copy `sqlitekvstore.py` to your python path and import it.
 'bar'
 >>> len(kv)
 1
+>>> "foo" in kv
+True
+>>> "baz" in kv
+False
 >>> kv.delete("foo")
 >>> kv.get("foo")
 >>> kv.close()
@@ -132,10 +136,6 @@ By default, [SQLite WAL mode](https://www.sqlite.org/wal.html) is not enabled. E
 >>> kv.set("foo", "bar")
 >>> kv.get("foo")
 'bar'
->>> "foo" in kv
-True
->>> "baz" in kv
-False
 >>> kv.close()
 >>>
 ```
