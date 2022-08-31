@@ -4,7 +4,7 @@ This is a simple key value store backed by sqlite. It is intended for cases wher
 
 ## Rationale
 
-I write a lot python command line utilities, some of which need to persistently store data, for example, to resume a previous operation. After experimenting with different solutions, such as plain JSON, I've found that sqlite offers an optimal mix of performance, portability, and ease of use. However, I got tired of writing the same boilerplate code over and over to create and use a simple sqlite database hence this package. There are a number of other sqlite key value stores out there, but none of them were exactly what I was looking for so I rolled my own.
+I write a lot python command line utilities, some of which need to persistently store data, for example, to resume a previous operation. After experimenting with different solutions, such as plain JSON, I've found that sqlite offers an optimal mix of performance, portability, and ease of use. However, I got tired of writing the same boilerplate code over and over to create and use a simple sqlite database hence this package. There are a [number of other python sqlite key value stores](https://github.com/search?l=Python&q=sqlite+key+value&type=Repositories) out there, but none of them were exactly what I was looking for so I rolled my own.
 
 ## Installation
 
