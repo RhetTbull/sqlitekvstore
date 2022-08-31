@@ -20,13 +20,12 @@ Copy `sqlitekvstore.py` to your python path and import it.
 >>> kv.set("foo", "bar")
 >>> kv.get("foo")
 'bar'
->>> kv["foo"]
-'bar'
+>>> len(kv)
+1
 >>> kv.delete("foo")
 >>> kv.get("foo")
->>> 
 >>> kv.close()
->>> 
+>>>
 ```
 
 ### Context Manager
