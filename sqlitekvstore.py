@@ -1,5 +1,7 @@
 """Simple key-value store using sqlite3"""
 
+
+import contextlib
 import os.path
 import sqlite3
 from typing import Callable, Generator, Optional, Tuple, TypeVar
@@ -8,7 +10,7 @@ from typing import Callable, Generator, Optional, Tuple, TypeVar
 T = TypeVar("T")
 
 
-class SqliteKeyValueStore:
+class SQLiteKeyValueStore:
     """Simple Key-Value Store that uses sqlite3 database as backend"""
 
     def __init__(
@@ -200,3 +202,8 @@ class SqliteKeyValueStore:
         cursor = conn.cursor()
         cursor.execute("SELECT COUNT(*) FROM data;")
         return cursor.fetchone()[0]
+
+    def __del__(self):
+        """Try to close the database in case it wasn't already closed. Don't count on this!"""
+        with contextlib.suppress(Exception):
+            self.close()

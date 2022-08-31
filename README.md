@@ -15,8 +15,8 @@ Copy `sqlitekvstore.py` to your python path and import it.
 ### Basic Usage
 
 ```pycon
->>> from sqlitekvstore import SqliteKeyValueStore
->>> kv = SqliteKeyValueStore("data.db")
+>>> from sqlitekvstore import SQLiteKeyValueStore
+>>> kv = SQLiteKeyValueStore("data.db")
 >>> kv.set("foo", "bar")
 >>> kv.get("foo")
 'bar'
@@ -30,13 +30,11 @@ Copy `sqlitekvstore.py` to your python path and import it.
 
 ### Context Manager
 
-You can use SqliteKeyValueStore as a context manager to automatically close the database when you're done with it. If you don't do this, you'll need to call `close()` yourself.
-
-Note: You can set `wal=True` to enable [Sqlite WAL mode](https://www.sqlite.org/wal.html) which will provide much better performance, particularly when writing a lot of key/value pairs.
+You can use SQLiteKeyValueStore as a context manager to automatically close the database when you're done with it. If you don't do this, you'll need to call `close()` yourself.
 
 ```pycon
->>> from sqlitekvstore import SqliteKeyValueStore
->>> with SqliteKeyValueStore("data.db", wal=True) as kv:
+>>> from sqlitekvstore import SQLiteKeyValueStore
+>>> with SQLiteKeyValueStore("data.db") as kv:
 ...     kv.set("foo", "bar")
 ...     assert kv.get("foo") == "bar"
 ...
@@ -45,11 +43,11 @@ Note: You can set `wal=True` to enable [Sqlite WAL mode](https://www.sqlite.org/
 
 ### Dictionary Interface
 
-SqliteKeyValueStore supports the standard dictionary interface.
+SQLiteKeyValueStore supports the standard dictionary interface.
 
 ```pycon
->>> from sqlitekvstore import SqliteKeyValueStore
->>> kv = SqliteKeyValueStore("data.db")
+>>> from sqlitekvstore import SQLiteKeyValueStore
+>>> kv = SQLiteKeyValueStore("data.db")
 >>> kv["foo"] = "bar"
 >>> kv["foo"]
 'bar'
@@ -80,14 +78,31 @@ qux baz
 >>>
 ```
 
+### Default Values
+
+You can provide a default value to `get()` to return if the key doesn't exist. Note that this does not create the key in the database.
+
+```pycon
+>>> from sqlitekvstore import SQLiteKeyValueStore
+>>> kv = SQLiteKeyValueStore("data.db")
+>>> kv.set("foo", "bar")
+>>> kv.get("foo")
+'bar'
+>>> kv.get("FOO")
+>>> kv.get("FOO", "BAR")
+'BAR'
+>>> kv.get("FOO")
+>>>
+```
+
 ### Custom Value Types
 
 Keys must be a type supported by sqlite (strings, bytes, integers, or floats). Values can be any type as long as you provide a serializer/deserializer function that converts your values to an appropriate type. Here's an example using JSON:
 
 ```pycon
->>> from sqlitekvstore import SqliteKeyValueStore
+>>> from sqlitekvstore import SQLiteKeyValueStore
 >>> import json
->>> kv = SqliteKeyValueStore("data.db", serialize=json.dumps, deserialize=json.loads)
+>>> kv = SQLiteKeyValueStore("data.db", serialize=json.dumps, deserialize=json.loads)
 >>> kv["foo"] = {"bax": "buz"}
 >>> kv["foo"]
 {'bax': 'buz'}
@@ -97,23 +112,49 @@ Keys must be a type supported by sqlite (strings, bytes, integers, or floats). V
 And here's an example using pickle:
 
 ```pycon
->>> from sqlitekvstore import SqliteKeyValueStore
+>>> from sqlitekvstore import SQLiteKeyValueStore
 >>> import pickle
 >>> import datetime
->>> kv = SqliteKeyValueStore("pickle.db", serialize=pickle.dumps, deserialize=pickle.loads)
+>>> kv = SQLiteKeyValueStore("pickle.db", serialize=pickle.dumps, deserialize=pickle.loads)
 >>> kv["date1"] = datetime.datetime(2022,8,30,0,0,0)
 >>> kv["date1"]
 datetime.datetime(2022, 8, 30, 0, 0)
 >>>
 ```
 
+### Performance
+
+By default, [SQLite WAL mode](https://www.sqlite.org/wal.html) is not enabled. Enabling this will provide much better performance, particularly when writing a lot of key/value pairs.  You can enable WAL mode by passing `wal=True` to the constructor.  This is not enabled by default because WAL mode causes SQLite to create additional journal files alongside the database file and for simple use cases, I prefer to maintain a single database file.
+
+```pycon
+>>> from sqlitekvstore import SQLiteKeyValueStore
+>>> kv = SQLiteKeyValueStore("data.db", wal=True)
+>>> kv.set("foo", "bar")
+>>> kv.get("foo")
+'bar'
+>>> kv.close()
+>>>
+```
+
+As a point of reference, here are the results of inserting and then reading 10,000 key/value pairs into a database with/without WAL mode enabled on my fairly old Macbook laptop:
+
+    Without WAL Mode
+    Insert 10000 keys in 18.17 seconds
+    Get 10000 keys in 0.35 seconds
+    Total 18.52 seconds
+
+    WAL Mode
+    Insert 10000 keys in 2.48 seconds
+    Get 10000 keys in 0.14 seconds
+    Total 2.62 seconds
+
 ## Limitations and Implementation Notes
 
 * Keys must be a type directly supported by sqlite, e.g. strings, bytes, integers, or floats.
 * Keys must be unique.
-* Values must be a type directly supported by sqlite, e.g. strings, bytes, integers, or floats however you may be provide a custom serializer/deserializer to serialize/deserialize your values to `SqliteKeyValueStore.__init__()` and this will be used for all operations.
+* Values must be a type directly supported by sqlite, e.g. strings, bytes, integers, or floats however you may be provide a custom serializer/deserializer to serialize/deserialize your values to `SQLiteKeyValueStore.__init__()` and this will be used for all operations.
 * Keys and values are stored using using sqlite's `BLOB` type.
-* There is only a single data table.  To use multiple tables, you would need to create a new `SqliteKeyValueStore` instance for each table.
+* There is only a single data table.  To use multiple tables, you would need to create a new `SQLiteKeyValueStore` instance for each table.
 * To keep the database a single file, WAL mode is not enabled by default. If you need to store many keys, you should enable WAL mode which will significantly improve performance but will also create additional journal files for your database.
 
 ## Testing
