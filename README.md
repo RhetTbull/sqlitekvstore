@@ -141,6 +141,8 @@ datetime.datetime(2022, 8, 30, 0, 0)
 
 ### Performance
 
+#### WAL Mode
+
 By default, [SQLite WAL mode](https://www.sqlite.org/wal.html) is not enabled. Enabling this will provide much better performance, particularly when writing a lot of key/value pairs.  You can enable WAL mode by passing `wal=True` to the constructor.  This is not enabled by default because WAL mode causes SQLite to create additional journal files alongside the database file and for simple use cases, I prefer to maintain a single database file.
 
 ```pycon
@@ -164,6 +166,8 @@ As a point of reference, here are the results of inserting and then reading 10,0
     Insert 10000 keys in 2.48 seconds
     Get 10000 keys in 0.14 seconds
     Total 2.62 seconds
+
+#### `set_many()`
 
 If you need to set many key/value pairs at once, you can use the `set_many()` method. This is much faster than calling `set()` in a loop because `set()` commits to the database after each call.  `set_many()` takes an iterable of (key, value) tuples or a dictionary of key:value pairs.
 
