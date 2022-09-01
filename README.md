@@ -205,7 +205,7 @@ If you insert/delete/update *a lot* of keys you may want to vacuum the database 
 * Values must be a type directly supported by sqlite, e.g. strings, bytes, integers, or floats however you may be provide a custom serializer/deserializer to serialize/deserialize your values to `SQLiteKVStore.__init__()` and this will be used for all operations.
 * Keys and values are stored using using sqlite's `BLOB` type.
 * There is only a single data table.  To use multiple tables, you would need to create a new `SQLiteKVStore` instance for each table.  You could also use a single table and prefix your keys with a table name, e.g. `table1:foo` and `table2:foo`.
-* To keep the database a single file, WAL mode is not enabled by default. If you need to store many keys, you should enable WAL mode which will significantly improve performance but will also create additional journal files for your database.
+* To keep the database a single file, WAL mode is not enabled by default. If you need to store many keys, you should enable WAL mode which will significantly improve performance but will also create additional journal files for your database.  Once you have enabled WAL mode on a database, it will stay enabled for that database even if you set `wal=False` in the constructor.
 
 ## Schema
 
