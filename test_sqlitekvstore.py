@@ -80,6 +80,40 @@ def test_basic_get_set_wal(tmpdir):
         conn.execute("PRAGMA user_version;")
 
 
+def test_set_many(tmpdir):
+    """Test set_many()"""
+    dbpath = tmpdir / "kvtest.db"
+
+    kvstore = sqlitekvstore.SQLiteKeyValueStore(dbpath)
+    kvstore.set_many([("foo", "bar"), ("baz", "qux")])
+    assert kvstore.get("foo") == "bar"
+    assert kvstore.get("baz") == "qux"
+    kvstore.close()
+
+    # make sure values got committed
+    kvstore = sqlitekvstore.SQLiteKeyValueStore(dbpath)
+    assert kvstore.get("foo") == "bar"
+    assert kvstore.get("baz") == "qux"
+    kvstore.close()
+
+
+def test_set_many_dict(tmpdir):
+    """Test set_many() with dict of values"""
+    dbpath = tmpdir / "kvtest.db"
+
+    kvstore = sqlitekvstore.SQLiteKeyValueStore(dbpath)
+    kvstore.set_many({"foo": "bar", "baz": "qux"})
+    assert kvstore.get("foo") == "bar"
+    assert kvstore.get("baz") == "qux"
+    kvstore.close()
+
+    # make sure values got committed
+    kvstore = sqlitekvstore.SQLiteKeyValueStore(dbpath)
+    assert kvstore.get("foo") == "bar"
+    assert kvstore.get("baz") == "qux"
+    kvstore.close()
+
+
 def test_basic_context_handler(tmpdir):
     """Test basic functionality with context handler"""
 

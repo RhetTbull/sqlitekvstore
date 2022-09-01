@@ -165,6 +165,24 @@ As a point of reference, here are the results of inserting and then reading 10,0
     Get 10000 keys in 0.14 seconds
     Total 2.62 seconds
 
+If you need to set many key/value pairs at once, you can use the `set_many()` method. This is much faster than calling `set()` in a loop because `set()` commits to the database after each call.  `set_many()` takes an iterable of (key, value) tuples or a dictionary of key:value pairs.
+
+```pycon
+>>> from sqlitekvstore import SQLiteKeyValueStore
+>>> kv = SQLiteKeyValueStore("data_many.db")
+>>> kv.set_many([("foo", "bar"), ("quz", "qax")])
+>>> kv.get("foo")
+'bar'
+>>> kv.get("quz")
+'qax'
+>>> kv.set_many({"fizz": "buzz", "fuzz": "bizz"})
+>>> kv.get("fizz")
+'buzz'
+>>> kv.get("fuzz")
+'bizz'
+>>>
+```
+
 ### Other Features
 
 If you insert/delete/update *a lot* of keys you may want to vacuum the database to reclaim unused space.  This can be done by calling `vacuum()`.  Reference [SQLite vacuum command](https://www.sqlite.org/lang_vacuum.html).

@@ -4,7 +4,7 @@
 import contextlib
 import os.path
 import sqlite3
-from typing import Callable, Generator, Optional, Tuple, TypeVar
+from typing import Callable, Dict, Generator, Iterable, Optional, Tuple, TypeVar, Union
 
 # keep mypy happy
 T = TypeVar("T")
@@ -78,6 +78,21 @@ class SQLiteKeyValueStore:
         cursor = conn.cursor()
         cursor.execute(
             "INSERT OR REPLACE INTO data VALUES (?, ?);", (key, serialized_value)
+        )
+        conn.commit()
+
+    def set_many(self, items: Union[Iterable[Tuple[T, T]], Dict[T, T]]):
+        """Set multiple key:value pairs
+
+        Args:
+            items: iterable of (key, value) tuples or dictionary of key:value pairs
+        """
+        conn = self.connection()
+        cursor = conn.cursor()
+        _items = items.items() if isinstance(items, dict) else items
+        cursor.executemany(
+            "INSERT OR REPLACE INTO data VALUES (?, ?);",
+            ((key, self._serialize(value)) for key, value in _items),
         )
         conn.commit()
 
