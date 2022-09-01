@@ -207,6 +207,16 @@ If you insert/delete/update *a lot* of keys you may want to vacuum the database 
 * There is only a single data table.  To use multiple tables, you would need to create a new `SQLiteKVStore` instance for each table.  You could also use a single table and prefix your keys with a table name, e.g. `table1:foo` and `table2:foo`.
 * To keep the database a single file, WAL mode is not enabled by default. If you need to store many keys, you should enable WAL mode which will significantly improve performance but will also create additional journal files for your database.
 
+## Schema
+
+The database schema is simple:
+
+```sql
+CREATE TABLE _about (id INTEGER PRIMARY KEY, description TEXT);
+CREATE TABLE data (key BLOB PRIMARY KEY NOT NULL, value BLOB);
+CREATE UNIQUE INDEX idx_key ON data (key);
+```
+
 ## Testing
 
 100% test coverage. 100% mypy type checking.
