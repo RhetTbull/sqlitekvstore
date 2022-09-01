@@ -15,8 +15,8 @@ Copy `sqlitekvstore.py` to your python path and import it.
 ### Basic Usage
 
 ```pycon
->>> from sqlitekvstore import SQLiteKeyValueStore
->>> kv = SQLiteKeyValueStore("data.db")
+>>> from sqlitekvstore import SQLiteKVStore
+>>> kv = SQLiteKVStore("data.db")
 >>> kv.set("foo", "bar")
 >>> kv.get("foo")
 'bar'
@@ -34,11 +34,11 @@ False
 
 ### Context Manager
 
-You can use SQLiteKeyValueStore as a context manager to automatically close the database when you're done with it. If you don't do this, you'll need to call `close()` yourself.
+You can use SQLiteKVStore as a context manager to automatically close the database when you're done with it. If you don't do this, you'll need to call `close()` yourself.
 
 ```pycon
->>> from sqlitekvstore import SQLiteKeyValueStore
->>> with SQLiteKeyValueStore("data.db") as kv:
+>>> from sqlitekvstore import SQLiteKVStore
+>>> with SQLiteKVStore("data.db") as kv:
 ...     kv.set("foo", "bar")
 ...     assert kv.get("foo") == "bar"
 ...
@@ -47,11 +47,11 @@ You can use SQLiteKeyValueStore as a context manager to automatically close the 
 
 ### Dictionary Interface
 
-SQLiteKeyValueStore supports the standard dictionary interface.
+SQLiteKVStore supports the standard dictionary interface.
 
 ```pycon
->>> from sqlitekvstore import SQLiteKeyValueStore
->>> kv = SQLiteKeyValueStore("data.db")
+>>> from sqlitekvstore import SQLiteKVStore
+>>> kv = SQLiteKVStore("data.db")
 >>> kv["foo"] = "bar"
 >>> kv["foo"]
 'bar'
@@ -87,8 +87,8 @@ qux baz
 You can provide a default value to `get()` to return if the key doesn't exist. Note that this does not create the key in the database.
 
 ```pycon
->>> from sqlitekvstore import SQLiteKeyValueStore
->>> kv = SQLiteKeyValueStore("data.db")
+>>> from sqlitekvstore import SQLiteKVStore
+>>> kv = SQLiteKVStore("data.db")
 >>> kv.set("foo", "bar")
 >>> kv.get("foo")
 'bar'
@@ -104,9 +104,9 @@ You can provide a default value to `get()` to return if the key doesn't exist. N
 Keys must be a type supported by sqlite (strings, bytes, integers, or floats). Values can be any type as long as you provide a serializer/deserializer function that converts your values to an appropriate type. Here's an example using JSON:
 
 ```pycon
->>> from sqlitekvstore import SQLiteKeyValueStore
+>>> from sqlitekvstore import SQLiteKVStore
 >>> import json
->>> kv = SQLiteKeyValueStore("data.db", serialize=json.dumps, deserialize=json.loads)
+>>> kv = SQLiteKVStore("data.db", serialize=json.dumps, deserialize=json.loads)
 >>> kv["foo"] = {"bax": "buz"}
 >>> kv["foo"]
 {'bax': 'buz'}
@@ -116,10 +116,10 @@ Keys must be a type supported by sqlite (strings, bytes, integers, or floats). V
 And here's an example using pickle:
 
 ```pycon
->>> from sqlitekvstore import SQLiteKeyValueStore
+>>> from sqlitekvstore import SQLiteKVStore
 >>> import pickle
 >>> import datetime
->>> kv = SQLiteKeyValueStore("pickle.db", serialize=pickle.dumps, deserialize=pickle.loads)
+>>> kv = SQLiteKVStore("pickle.db", serialize=pickle.dumps, deserialize=pickle.loads)
 >>> kv["date1"] = datetime.datetime(2022,8,30,0,0,0)
 >>> kv["date1"]
 datetime.datetime(2022, 8, 30, 0, 0)
@@ -128,11 +128,11 @@ datetime.datetime(2022, 8, 30, 0, 0)
 
 ### Database `.about` Property
 
-`SQLiteKeyValueStore.about` is an optional property that can be used to set/get a description of the database.  This is useful for when you later discover a sqlite database laying around and want to inspect it to know what it was used for.  If not set, `.about` will return an empty string.
+`SQLiteKVStore.about` is an optional property that can be used to set/get a description of the database.  This is useful for when you later discover a sqlite database laying around and want to inspect it to know what it was used for.  If not set, `.about` will return an empty string.
 
 ```pycon
->>> from sqlitekvstore import SQLiteKeyValueStore
->>> kv = SQLiteKeyValueStore("data.db")
+>>> from sqlitekvstore import SQLiteKVStore
+>>> kv = SQLiteKVStore("data.db")
 >>> kv.about = "This is my key-value database"
 >>> kv.about
 'This is my key-value database'
@@ -146,8 +146,8 @@ datetime.datetime(2022, 8, 30, 0, 0)
 By default, [SQLite WAL mode](https://www.sqlite.org/wal.html) is not enabled. Enabling this will provide much better performance, particularly when writing a lot of key/value pairs.  You can enable WAL mode by passing `wal=True` to the constructor.  This is not enabled by default because WAL mode causes SQLite to create additional journal files alongside the database file and for simple use cases, I prefer to maintain a single database file.
 
 ```pycon
->>> from sqlitekvstore import SQLiteKeyValueStore
->>> kv = SQLiteKeyValueStore("data.db", wal=True)
+>>> from sqlitekvstore import SQLiteKVStore
+>>> kv = SQLiteKVStore("data.db", wal=True)
 >>> kv.set("foo", "bar")
 >>> kv.get("foo")
 'bar'
@@ -172,8 +172,8 @@ As a point of reference, here are the results of inserting and then reading 10,0
 If you need to set many key/value pairs at once, you can use the `set_many()` method. This is much faster than calling `set()` in a loop because `set()` commits to the database after each call.  `set_many()` takes an iterable of (key, value) tuples or a dictionary of key:value pairs.
 
 ```pycon
->>> from sqlitekvstore import SQLiteKeyValueStore
->>> kv = SQLiteKeyValueStore("data_many.db")
+>>> from sqlitekvstore import SQLiteKVStore
+>>> kv = SQLiteKVStore("data_many.db")
 >>> kv.set_many([("foo", "bar"), ("quz", "qax")])
 >>> kv.get("foo")
 'bar'
@@ -192,8 +192,8 @@ If you need to set many key/value pairs at once, you can use the `set_many()` me
 If you insert/delete/update *a lot* of keys you may want to vacuum the database to reclaim unused space.  This can be done by calling `vacuum()`.  Reference [SQLite vacuum command](https://www.sqlite.org/lang_vacuum.html).
 
 ```pycon
->>> from sqlitekvstore import SQLiteKeyValueStore
->>> kv = SQLiteKeyValueStore("data.db")
+>>> from sqlitekvstore import SQLiteKVStore
+>>> kv = SQLiteKVStore("data.db")
 >>> kv.vacuum()
 >>>
 ```
@@ -202,9 +202,9 @@ If you insert/delete/update *a lot* of keys you may want to vacuum the database 
 
 * Keys must be a type directly supported by sqlite, e.g. strings, bytes, integers, or floats.
 * Keys must be unique.
-* Values must be a type directly supported by sqlite, e.g. strings, bytes, integers, or floats however you may be provide a custom serializer/deserializer to serialize/deserialize your values to `SQLiteKeyValueStore.__init__()` and this will be used for all operations.
+* Values must be a type directly supported by sqlite, e.g. strings, bytes, integers, or floats however you may be provide a custom serializer/deserializer to serialize/deserialize your values to `SQLiteKVStore.__init__()` and this will be used for all operations.
 * Keys and values are stored using using sqlite's `BLOB` type.
-* There is only a single data table.  To use multiple tables, you would need to create a new `SQLiteKeyValueStore` instance for each table.
+* There is only a single data table.  To use multiple tables, you would need to create a new `SQLiteKVStore` instance for each table.
 * To keep the database a single file, WAL mode is not enabled by default. If you need to store many keys, you should enable WAL mode which will significantly improve performance but will also create additional journal files for your database.
 
 ## Testing
