@@ -143,6 +143,18 @@ datetime.datetime(2022, 8, 30, 0, 0)
 >>>
 ```
 
+### Database `.path` Property
+
+`SQLiteKVStore.path` is a read-only property that returns the path to the database file.
+
+```pycon
+>>> from sqlitekvstore import SQLiteKVStore
+>>> kv = SQLiteKVStore("data.db")
+>>> kv.path
+'data.db'
+>>>
+```
+
 ### Performance
 
 #### WAL Mode
@@ -193,12 +205,29 @@ If you need to set many key/value pairs at once, you can use the `set_many()` me
 
 ### Other Features
 
+#### `vacuum()` Method
+
 If you insert/delete/update *a lot* of keys you may want to vacuum the database to reclaim unused space.  This can be done by calling `vacuum()`.  Reference [SQLite vacuum command](https://www.sqlite.org/lang_vacuum.html).
 
 ```pycon
 >>> from sqlitekvstore import SQLiteKVStore
 >>> kv = SQLiteKVStore("data.db")
 >>> kv.vacuum()
+>>>
+```
+
+#### `wipe()` Method
+
+If you need to delete all keys from the database, you can call `wipe()`.
+
+```pycon
+>>> from sqlitekvstore import SQLiteKVStore
+>>> kv = SQLiteKVStore("data.db")
+>>> kv.set("foo", "bar")
+>>> kv.get("foo")
+'bar'
+>>> kv.wipe()
+>>> kv.get("foo")
 >>>
 ```
 

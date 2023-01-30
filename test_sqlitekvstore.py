@@ -243,3 +243,26 @@ def test_keys_values_items(tmpdir):
         ("grault", "garply"),
         ("quux", "corge"),
     ]
+
+
+def test_path(tmpdir):
+    """Test path property"""
+    dbpath = tmpdir / "kvtest.db"
+    kvstore = sqlitekvstore.SQLiteKVStore(dbpath)
+    assert kvstore.path == dbpath
+
+
+def test_wipe(tmpdir):
+    """Test wipe"""
+    dbpath = tmpdir / "kvtest.db"
+    kvstore = sqlitekvstore.SQLiteKVStore(dbpath)
+    kvstore.set("foo", "bar")
+    kvstore.set("baz", "qux")
+    kvstore.set("quux", "corge")
+    kvstore.set("grault", "garply")
+    assert len(kvstore) == 4
+    kvstore.wipe()
+    assert len(kvstore) == 0
+    assert "foo"
+    kvstore.set("foo", "bar")
+    assert kvstore.get("foo") == "bar"

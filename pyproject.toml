@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "sqlitekvstore"
-version = "0.1.0"
+version = "0.2.0"
 description = "Simple key-value store backed by sqlite"
 authors = ["Rhet Turnbull <rturnbull+git@gmail.com>"]
 license = "MIT License"
