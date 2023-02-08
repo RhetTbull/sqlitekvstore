@@ -12,7 +12,15 @@ If you need a simple key value store, consider the [dbm](https://docs.python.org
 
 ## Installation
 
-Copy `sqlitekvstore.py` to your python path and import it.
+### PyPI
+
+```bash
+pip install sqlitekvstore
+```
+
+### Manual
+
+All the code is contained in a single file, `sqlitekvstore.py` which you can copy to your project.  Alternatively, you can copy it to your python path and import it.
 
 ## Usage
 
