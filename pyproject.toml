@@ -15,7 +15,7 @@ Home = "https://github.com/RhetTbull/sqlitekvstore"
 
 [tool.poetry]
 name = "sqlitekvstore"
-version = "0.2.1"
+version = "0.3.0"
 description = "Simple key-value store backed by sqlite"
 authors = ["Rhet Turnbull <rturnbull+git@gmail.com>"]
 license = "MIT License"
