@@ -4,29 +4,67 @@ These notes are to help me remember how to work on the project.
 
 ## Setup
 
-Install poetry (used to manage development dependencies):
+Install [uv](https://docs.astral.sh/uv/getting-started/installation/) (used to manage dependencies and publishing):
 
 ```bash
-pip install poetry
+curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
 Install development dependencies:
 
 ```bash
-poetry install
+uv sync --dev
 ```
 
 ## Testing
 
-* `black sqlitekvstore.py test_sqlitekvstore.py`
-* `flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics`
-* `flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics`
-* `poetry run pytest --mypy --cov --doctest-glob="README.md"`
+Format code and run linter:
+
+```bash
+uv run ruff format .
+uv run ruff check --fix .
+```
+
+Run tests:
+
+```bash
+uv run pytest --cov
+```
+
+## Thread Safety
+
+The `SQLiteKVStore` class is thread-safe. Multiple threads can safely read and write to the same store instance concurrently.
+
+Implementation details:
+- Uses `check_same_thread=False` when creating SQLite connections to allow multi-threaded access
+- All database operations are protected by a `threading.Lock()` to serialize access
+- Each method (`get`, `set`, `delete`, `keys`, `values`, `items`, etc.) is individually atomic
+- Note: There is no snapshot isolation across separate method calls. If you call `keys()` then `values()` while another thread is writing, the counts may differ.
 
 ## Release
 
-Package management is done with [flit]](https://flit.readthedocs.io/en/latest/).
+Build the package:
 
 ```bash
-flit publish
+uv build
+```
+
+Publish to PyPI:
+
+```bash
+uv publish
+```
+
+## Version Bumping
+
+Version is defined in two places that must be kept in sync:
+- `sqlitekvstore.py` (`__version__`)
+- `pyproject.toml` (`version`)
+
+The `.bumpversion.cfg` file is configured to update both files:
+
+```bash
+bump2version patch  # 0.3.0 -> 0.3.1
+bump2version minor  # 0.3.0 -> 0.4.0
+bump2version major  # 0.3.0 -> 1.0.0
 ```
