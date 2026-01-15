@@ -1,9 +1,9 @@
 """Simple key-value store using sqlite3"""
 
-
 import contextlib
 import os.path
 import sqlite3
+import threading
 from typing import Callable, Dict, Generator, Iterable, Optional, Tuple, TypeVar, Union
 
 # keep mypy happy, keys/values can be any type supported by SQLite
@@ -42,8 +42,9 @@ class SQLiteKVStore:
         self._dbpath = dbpath
         self._serialize_func = serialize
         self._deserialize_func = deserialize
+        self._lock = threading.Lock()
         self._conn = (
-            sqlite3.connect(dbpath)
+            sqlite3.connect(dbpath, check_same_thread=False)
             if os.path.exists(dbpath)
             else self._create_database(dbpath)
         )
@@ -55,7 +56,7 @@ class SQLiteKVStore:
 
     def _create_database(self, dbpath: str):
         """Create the key-value database"""
-        conn = sqlite3.connect(dbpath)
+        conn = sqlite3.connect(dbpath, check_same_thread=False)
         cursor = conn.cursor()
         cursor.execute(
             """CREATE TABLE IF NOT EXISTS _about (
@@ -78,12 +79,13 @@ class SQLiteKVStore:
     def set(self, key: T, value: T):
         """Set key:value pair"""
         serialized_value = self._serialize(value)
-        conn = self.connection()
-        cursor = conn.cursor()
-        cursor.execute(
-            "INSERT OR REPLACE INTO data VALUES (?, ?);", (key, serialized_value)
-        )
-        conn.commit()
+        with self._lock:
+            conn = self.connection()
+            cursor = conn.cursor()
+            cursor.execute(
+                "INSERT OR REPLACE INTO data VALUES (?, ?);", (key, serialized_value)
+            )
+            conn.commit()
 
     def set_many(self, items: Union[Iterable[Tuple[T, T]], Dict[T, T]]):
         """Set multiple key:value pairs
@@ -91,14 +93,16 @@ class SQLiteKVStore:
         Args:
             items: iterable of (key, value) tuples or dictionary of key:value pairs
         """
-        conn = self.connection()
-        cursor = conn.cursor()
         _items = items.items() if isinstance(items, dict) else items
-        cursor.executemany(
-            "INSERT OR REPLACE INTO data VALUES (?, ?);",
-            ((key, self._serialize(value)) for key, value in _items),
-        )
-        conn.commit()
+        serialized_items = [(key, self._serialize(value)) for key, value in _items]
+        with self._lock:
+            conn = self.connection()
+            cursor = conn.cursor()
+            cursor.executemany(
+                "INSERT OR REPLACE INTO data VALUES (?, ?);",
+                serialized_items,
+            )
+            conn.commit()
 
     def get(self, key: T, default: Optional[T] = None) -> Optional[T]:
         """Get value for key
@@ -118,10 +122,11 @@ class SQLiteKVStore:
 
     def delete(self, key: T):
         """Delete key from key-value store"""
-        conn = self.connection()
-        cursor = conn.cursor()
-        cursor.execute("DELETE FROM data WHERE key = ?;", (key,))
-        conn.commit()
+        with self._lock:
+            conn = self.connection()
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM data WHERE key = ?;", (key,))
+            conn.commit()
 
     def pop(self, key) -> Optional[T]:
         """Delete key and return value"""
@@ -135,48 +140,55 @@ class SQLiteKVStore:
 
     def values(self) -> Generator[T, None, None]:
         """Return values as generator"""
-        conn = self.connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT value FROM data;")
-        for value in cursor:
+        with self._lock:
+            conn = self.connection()
+            cursor = conn.cursor()
+            cursor.execute("SELECT value FROM data;")
+            results = cursor.fetchall()
+        for value in results:
             yield self._deserialize(value[0])
 
     def items(self) -> Generator[Tuple[T, T], None, None]:
         """Return items (key, value) as generator"""
-        conn = self.connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT key, value FROM data;")
-        for key, value in cursor:
+        with self._lock:
+            conn = self.connection()
+            cursor = conn.cursor()
+            cursor.execute("SELECT key, value FROM data;")
+            results = cursor.fetchall()
+        for key, value in results:
             yield key, self._deserialize(value)
 
     def close(self):
         """Close the database"""
-        self.connection().close()
+        with self._lock:
+            self.connection().close()
 
     @property
     def about(self) -> str:
         """Return description for the database"""
-        results = (
-            self.connection()
-            .cursor()
-            .execute("SELECT description FROM _about;")
-            .fetchone()
-        )
+        with self._lock:
+            results = (
+                self.connection()
+                .cursor()
+                .execute("SELECT description FROM _about;")
+                .fetchone()
+            )
         return results[0] if results else ""
 
     @about.setter
     def about(self, description: str):
         """Set description of the database"""
-        conn = self.connection()
-        cursor = conn.cursor()
-        cursor.execute(
-            "INSERT OR REPLACE INTO _about VALUES (?, ?);",
-            (
-                1,
-                description,
-            ),
-        )
-        conn.commit()
+        with self._lock:
+            conn = self.connection()
+            cursor = conn.cursor()
+            cursor.execute(
+                "INSERT OR REPLACE INTO _about VALUES (?, ?);",
+                (
+                    1,
+                    description,
+                ),
+            )
+            conn.commit()
 
     @property
     def path(self) -> str:
@@ -185,19 +197,23 @@ class SQLiteKVStore:
 
     def wipe(self):
         """Wipe the database"""
-        self.connection().execute("DELETE FROM data;")
-        self.connection().commit()
+        with self._lock:
+            self.connection().execute("DELETE FROM data;")
+            self.connection().commit()
         self.vacuum()
 
     def vacuum(self):
         """Vacuum the database, ref: https://www.sqlite.org/matrix/lang_vacuum.html"""
-        self.connection().execute("VACUUM;")
+        with self._lock:
+            self.connection().execute("VACUUM;")
 
     def _get(self, key: T) -> T:
         """Get value for key or raise KeyError if key not found"""
-        cursor = self.connection().cursor()
-        cursor.execute("SELECT value FROM data WHERE key = ?;", (key,))
-        if result := cursor.fetchone():
+        with self._lock:
+            cursor = self.connection().cursor()
+            cursor.execute("SELECT value FROM data WHERE key = ?;", (key,))
+            result = cursor.fetchone()
+        if result:
             return self._deserialize(result[0])
         raise KeyError(key)
 
@@ -223,16 +239,19 @@ class SQLiteKVStore:
             raise KeyError(key)
 
     def __iter__(self):
-        cursor = self.connection().cursor()
-        cursor.execute("SELECT key FROM data;")
-        for key in cursor:
+        with self._lock:
+            cursor = self.connection().cursor()
+            cursor.execute("SELECT key FROM data;")
+            results = cursor.fetchall()
+        for key in results:
             yield key[0]
 
     def __contains__(self, key: T) -> bool:
         # Implement in operator, don't use _get to avoid deserializing value unnecessarily
-        cursor = self.connection().cursor()
-        cursor.execute("SELECT 1 FROM data WHERE key = ?;", (key,))
-        return bool(cursor.fetchone())
+        with self._lock:
+            cursor = self.connection().cursor()
+            cursor.execute("SELECT 1 FROM data WHERE key = ?;", (key,))
+            return bool(cursor.fetchone())
 
     def __enter__(self):
         return self
@@ -241,9 +260,10 @@ class SQLiteKVStore:
         self.close()
 
     def __len__(self):
-        cursor = self.connection().cursor()
-        cursor.execute("SELECT COUNT(*) FROM data;")
-        return cursor.fetchone()[0]
+        with self._lock:
+            cursor = self.connection().cursor()
+            cursor.execute("SELECT COUNT(*) FROM data;")
+            return cursor.fetchone()[0]
 
     def __del__(self):
         """Try to close the database in case it wasn't already closed. Don't count on this!"""

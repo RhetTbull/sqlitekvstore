@@ -4,6 +4,7 @@ import gzip
 import json
 import pickle
 import sqlite3
+import threading
 from typing import Any
 
 import pytest
@@ -266,3 +267,204 @@ def test_wipe(tmpdir):
     assert "foo"
     kvstore.set("foo", "bar")
     assert kvstore.get("foo") == "bar"
+
+
+def test_thread_safety_concurrent_writes(tmpdir):
+    """Test that concurrent writes from multiple threads work correctly"""
+    dbpath = tmpdir / "kvtest.db"
+    kvstore = sqlitekvstore.SQLiteKVStore(dbpath)
+    num_threads = 10
+    writes_per_thread = 100
+    errors = []
+
+    def writer(thread_id):
+        try:
+            for i in range(writes_per_thread):
+                key = f"thread_{thread_id}_key_{i}"
+                value = f"thread_{thread_id}_value_{i}"
+                kvstore.set(key, value)
+        except Exception as e:
+            errors.append(e)
+
+    threads = [threading.Thread(target=writer, args=(i,)) for i in range(num_threads)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    assert len(errors) == 0, f"Errors occurred: {errors}"
+    assert len(kvstore) == num_threads * writes_per_thread
+
+    # Verify all values are correct
+    for thread_id in range(num_threads):
+        for i in range(writes_per_thread):
+            key = f"thread_{thread_id}_key_{i}"
+            expected = f"thread_{thread_id}_value_{i}"
+            assert kvstore.get(key) == expected
+
+    kvstore.close()
+
+
+def test_thread_safety_concurrent_reads_and_writes(tmpdir):
+    """Test concurrent reads and writes from multiple threads"""
+    dbpath = tmpdir / "kvtest.db"
+    kvstore = sqlitekvstore.SQLiteKVStore(dbpath)
+
+    # Pre-populate some data
+    for i in range(100):
+        kvstore.set(f"key_{i}", f"value_{i}")
+
+    num_threads = 10
+    operations_per_thread = 50
+    errors = []
+
+    def reader_writer(thread_id):
+        try:
+            for i in range(operations_per_thread):
+                # Read existing key
+                key_to_read = f"key_{i % 100}"
+                kvstore.get(key_to_read)
+
+                # Write new key
+                new_key = f"thread_{thread_id}_new_{i}"
+                kvstore.set(new_key, f"new_value_{i}")
+
+                # Check if key exists
+                _ = new_key in kvstore
+
+                # Get length
+                _ = len(kvstore)
+        except Exception as e:
+            errors.append(e)
+
+    threads = [
+        threading.Thread(target=reader_writer, args=(i,)) for i in range(num_threads)
+    ]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    assert len(errors) == 0, f"Errors occurred: {errors}"
+    kvstore.close()
+
+
+def test_thread_safety_concurrent_set_many(tmpdir):
+    """Test concurrent set_many operations"""
+    dbpath = tmpdir / "kvtest.db"
+    kvstore = sqlitekvstore.SQLiteKVStore(dbpath)
+    num_threads = 5
+    items_per_batch = 20
+    errors = []
+
+    def batch_writer(thread_id):
+        try:
+            items = [
+                (f"batch_{thread_id}_key_{i}", f"batch_{thread_id}_value_{i}")
+                for i in range(items_per_batch)
+            ]
+            kvstore.set_many(items)
+        except Exception as e:
+            errors.append(e)
+
+    threads = [
+        threading.Thread(target=batch_writer, args=(i,)) for i in range(num_threads)
+    ]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    assert len(errors) == 0, f"Errors occurred: {errors}"
+    assert len(kvstore) == num_threads * items_per_batch
+    kvstore.close()
+
+
+def test_thread_safety_concurrent_deletes(tmpdir):
+    """Test concurrent delete operations"""
+    dbpath = tmpdir / "kvtest.db"
+    kvstore = sqlitekvstore.SQLiteKVStore(dbpath)
+
+    # Pre-populate data
+    num_keys = 100
+    for i in range(num_keys):
+        kvstore.set(f"key_{i}", f"value_{i}")
+
+    errors = []
+    deleted_keys = set()
+    lock = threading.Lock()
+
+    def deleter(start, end):
+        try:
+            for i in range(start, end):
+                key = f"key_{i}"
+                kvstore.delete(key)
+                with lock:
+                    deleted_keys.add(key)
+        except Exception as e:
+            errors.append(e)
+
+    # Split deletions across threads
+    num_threads = 4
+    keys_per_thread = num_keys // num_threads
+    threads = [
+        threading.Thread(
+            target=deleter, args=(i * keys_per_thread, (i + 1) * keys_per_thread)
+        )
+        for i in range(num_threads)
+    ]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    assert len(errors) == 0, f"Errors occurred: {errors}"
+    assert len(kvstore) == 0
+    kvstore.close()
+
+
+def test_thread_safety_iteration_during_writes(tmpdir):
+    """Test that iteration works while other threads are writing"""
+    dbpath = tmpdir / "kvtest.db"
+    kvstore = sqlitekvstore.SQLiteKVStore(dbpath)
+
+    # Pre-populate some data
+    for i in range(50):
+        kvstore.set(f"initial_{i}", f"value_{i}")
+
+    errors = []
+    iteration_results = []
+
+    def writer():
+        try:
+            for i in range(100):
+                kvstore.set(f"new_key_{i}", f"new_value_{i}")
+        except Exception as e:
+            errors.append(e)
+
+    def reader():
+        try:
+            # Perform multiple iterations while writes are happening
+            for _ in range(5):
+                keys = list(kvstore.keys())
+                values = list(kvstore.values())
+                items = list(kvstore.items())
+                iteration_results.append((len(keys), len(values), len(items)))
+        except Exception as e:
+            errors.append(e)
+
+    writer_thread = threading.Thread(target=writer)
+    reader_thread = threading.Thread(target=reader)
+
+    writer_thread.start()
+    reader_thread.start()
+
+    writer_thread.join()
+    reader_thread.join()
+
+    assert len(errors) == 0, f"Errors occurred: {errors}"
+    # Check that iterations returned consistent results (same count for keys/values/items)
+    for keys_count, values_count, items_count in iteration_results:
+        assert keys_count == values_count == items_count
+
+    kvstore.close()
