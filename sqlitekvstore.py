@@ -9,7 +9,7 @@ from typing import Callable, Dict, Generator, Iterable, Optional, Tuple, TypeVar
 # keep mypy happy, keys/values can be any type supported by SQLite
 T = TypeVar("T")
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"
 
 __all__ = ["SQLiteKVStore"]
 
