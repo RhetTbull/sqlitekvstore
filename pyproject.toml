@@ -25,6 +25,7 @@ Home = "https://github.com/RhetTbull/sqlitekvstore"
 
 [dependency-groups]
 dev = [
+    "bump2version",
     "pytest>=8.0.0",
     "pytest-cov>=4.0.0",
     "ruff>=0.4.0",
