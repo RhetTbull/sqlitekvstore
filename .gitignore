@@ -9,3 +9,4 @@ dist/
 build/
 dist/.coverage
 .coverage
+.envrc
