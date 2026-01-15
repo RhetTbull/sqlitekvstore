@@ -187,9 +187,7 @@ def test_dict_interface(tmpdir):
 def test_serialize_deserialize(tmpdir):
     """Test serialize/deserialize"""
     dbpath = tmpdir / "kvtest.db"
-    kvstore = sqlitekvstore.SQLiteKVStore(
-        dbpath, serialize=json.dumps, deserialize=json.loads
-    )
+    kvstore = sqlitekvstore.SQLiteKVStore(dbpath, serialize=json.dumps, deserialize=json.loads)
     kvstore.set("foo", {"bar": "baz"})
     assert kvstore.get("foo") == {"bar": "baz"}
     assert kvstore.get("FOOBAR") is None
@@ -337,9 +335,7 @@ def test_thread_safety_concurrent_reads_and_writes(tmpdir):
         except Exception as e:
             errors.append(e)
 
-    threads = [
-        threading.Thread(target=reader_writer, args=(i,)) for i in range(num_threads)
-    ]
+    threads = [threading.Thread(target=reader_writer, args=(i,)) for i in range(num_threads)]
     for t in threads:
         t.start()
     for t in threads:
@@ -367,9 +363,7 @@ def test_thread_safety_concurrent_set_many(tmpdir):
         except Exception as e:
             errors.append(e)
 
-    threads = [
-        threading.Thread(target=batch_writer, args=(i,)) for i in range(num_threads)
-    ]
+    threads = [threading.Thread(target=batch_writer, args=(i,)) for i in range(num_threads)]
     for t in threads:
         t.start()
     for t in threads:
@@ -408,9 +402,7 @@ def test_thread_safety_concurrent_deletes(tmpdir):
     num_threads = 4
     keys_per_thread = num_keys // num_threads
     threads = [
-        threading.Thread(
-            target=deleter, args=(i * keys_per_thread, (i + 1) * keys_per_thread)
-        )
+        threading.Thread(target=deleter, args=(i * keys_per_thread, (i + 1) * keys_per_thread))
         for i in range(num_threads)
     ]
     for t in threads:

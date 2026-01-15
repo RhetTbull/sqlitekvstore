@@ -82,9 +82,7 @@ class SQLiteKVStore:
         with self._lock:
             conn = self.connection()
             cursor = conn.cursor()
-            cursor.execute(
-                "INSERT OR REPLACE INTO data VALUES (?, ?);", (key, serialized_value)
-            )
+            cursor.execute("INSERT OR REPLACE INTO data VALUES (?, ?);", (key, serialized_value))
             conn.commit()
 
     def set_many(self, items: Union[Iterable[Tuple[T, T]], Dict[T, T]]):
@@ -168,10 +166,7 @@ class SQLiteKVStore:
         """Return description for the database"""
         with self._lock:
             results = (
-                self.connection()
-                .cursor()
-                .execute("SELECT description FROM _about;")
-                .fetchone()
+                self.connection().cursor().execute("SELECT description FROM _about;").fetchone()
             )
         return results[0] if results else ""
 
