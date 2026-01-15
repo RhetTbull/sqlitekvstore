@@ -275,12 +275,11 @@ Contributions are welcome. Please open an issue or pull request if you find a bu
 ### Installation for Contributors
 
 * Fork and clone your fork
-* `pip install poetry`
-* `poetry install`
+* [Install uv](https://docs.astral.sh/uv/getting-started/installation/)
+* `uv sync --dev`
 * Edit `sqlitekvstore.py` to add features/fix bugs
 * Edit `test_sqlitekvstore.py` to add/update tests
-* `black sqlitekvstore.py test_sqlitekvstore.py`
-* `flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics`
-* `flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics`
-* `poetry run pytest --mypy --cov --doctest-glob="README.md"`
+* `uv run ruff format .`
+* `uv run ruff check --fix .`
+* `uv run pytest --cov`
 * Open a pull request to contribute your changes

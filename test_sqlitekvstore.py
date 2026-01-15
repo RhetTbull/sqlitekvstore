@@ -187,9 +187,7 @@ def test_dict_interface(tmpdir):
 def test_serialize_deserialize(tmpdir):
     """Test serialize/deserialize"""
     dbpath = tmpdir / "kvtest.db"
-    kvstore = sqlitekvstore.SQLiteKVStore(
-        dbpath, serialize=json.dumps, deserialize=json.loads
-    )
+    kvstore = sqlitekvstore.SQLiteKVStore(dbpath, serialize=json.dumps, deserialize=json.loads)
     kvstore.set("foo", {"bar": "baz"})
     assert kvstore.get("foo") == {"bar": "baz"}
     assert kvstore.get("FOOBAR") is None
@@ -337,9 +335,7 @@ def test_thread_safety_concurrent_reads_and_writes(tmpdir):
         except Exception as e:
             errors.append(e)
 
-    threads = [
-        threading.Thread(target=reader_writer, args=(i,)) for i in range(num_threads)
-    ]
+    threads = [threading.Thread(target=reader_writer, args=(i,)) for i in range(num_threads)]
     for t in threads:
         t.start()
     for t in threads:
@@ -367,9 +363,7 @@ def test_thread_safety_concurrent_set_many(tmpdir):
         except Exception as e:
             errors.append(e)
 
-    threads = [
-        threading.Thread(target=batch_writer, args=(i,)) for i in range(num_threads)
-    ]
+    threads = [threading.Thread(target=batch_writer, args=(i,)) for i in range(num_threads)]
     for t in threads:
         t.start()
     for t in threads:
@@ -408,9 +402,7 @@ def test_thread_safety_concurrent_deletes(tmpdir):
     num_threads = 4
     keys_per_thread = num_keys // num_threads
     threads = [
-        threading.Thread(
-            target=deleter, args=(i * keys_per_thread, (i + 1) * keys_per_thread)
-        )
+        threading.Thread(target=deleter, args=(i * keys_per_thread, (i + 1) * keys_per_thread))
         for i in range(num_threads)
     ]
     for t in threads:
@@ -433,7 +425,6 @@ def test_thread_safety_iteration_during_writes(tmpdir):
         kvstore.set(f"initial_{i}", f"value_{i}")
 
     errors = []
-    iteration_results = []
 
     def writer():
         try:
@@ -446,10 +437,12 @@ def test_thread_safety_iteration_during_writes(tmpdir):
         try:
             # Perform multiple iterations while writes are happening
             for _ in range(5):
-                keys = list(kvstore.keys())
-                values = list(kvstore.values())
-                items = list(kvstore.items())
-                iteration_results.append((len(keys), len(values), len(items)))
+                # Each of these operations should complete without error
+                # Note: counts may differ between calls since writes happen concurrently
+                list(kvstore.keys())
+                list(kvstore.values())
+                list(kvstore.items())
+                len(kvstore)
         except Exception as e:
             errors.append(e)
 
@@ -463,8 +456,7 @@ def test_thread_safety_iteration_during_writes(tmpdir):
     reader_thread.join()
 
     assert len(errors) == 0, f"Errors occurred: {errors}"
-    # Check that iterations returned consistent results (same count for keys/values/items)
-    for keys_count, values_count, items_count in iteration_results:
-        assert keys_count == values_count == items_count
+    # Verify final state: should have 50 initial + 100 new = 150 items
+    assert len(kvstore) == 150
 
     kvstore.close()
