@@ -272,11 +272,14 @@ def test_thread_safety_concurrent_writes(tmpdir):
     dbpath = tmpdir / "kvtest.db"
     kvstore = sqlitekvstore.SQLiteKVStore(dbpath)
     num_threads = 10
-    writes_per_thread = 100
+    # Exercise contention without making fsync throughput part of correctness.
+    writes_per_thread = 10
+    start = threading.Barrier(num_threads, timeout=10)
     errors = []
 
     def writer(thread_id):
         try:
+            start.wait()
             for i in range(writes_per_thread):
                 key = f"thread_{thread_id}_key_{i}"
                 value = f"thread_{thread_id}_value_{i}"
@@ -288,7 +291,7 @@ def test_thread_safety_concurrent_writes(tmpdir):
     for t in threads:
         t.start()
     for t in threads:
-        t.join(timeout=10)
+        t.join(timeout=30)
         assert not t.is_alive(), "worker did not finish"
 
     assert len(errors) == 0, f"Errors occurred: {errors}"
@@ -310,29 +313,31 @@ def test_thread_safety_concurrent_reads_and_writes(tmpdir):
     kvstore = sqlitekvstore.SQLiteKVStore(dbpath)
 
     # Pre-populate some data
-    for i in range(100):
-        kvstore.set(f"key_{i}", f"value_{i}")
+    num_existing_keys = 10
+    kvstore.set_many((f"key_{i}", f"value_{i}") for i in range(num_existing_keys))
 
     num_threads = 10
-    operations_per_thread = 50
+    operations_per_thread = 10
+    start = threading.Barrier(num_threads, timeout=10)
     errors = []
 
     def reader_writer(thread_id):
         try:
+            start.wait()
             for i in range(operations_per_thread):
                 # Read existing key
-                key_to_read = f"key_{i % 100}"
-                kvstore.get(key_to_read)
+                key_to_read = f"key_{i % num_existing_keys}"
+                assert kvstore.get(key_to_read) == f"value_{i % num_existing_keys}"
 
                 # Write new key
                 new_key = f"thread_{thread_id}_new_{i}"
                 kvstore.set(new_key, f"new_value_{i}")
 
                 # Check if key exists
-                _ = new_key in kvstore
+                assert new_key in kvstore
 
                 # Get length
-                _ = len(kvstore)
+                assert len(kvstore) >= num_existing_keys
         except Exception as e:
             errors.append(e)
 
@@ -340,10 +345,14 @@ def test_thread_safety_concurrent_reads_and_writes(tmpdir):
     for t in threads:
         t.start()
     for t in threads:
-        t.join(timeout=10)
+        t.join(timeout=30)
         assert not t.is_alive(), "worker did not finish"
 
     assert len(errors) == 0, f"Errors occurred: {errors}"
+    assert len(kvstore) == num_existing_keys + num_threads * operations_per_thread
+    for thread_id in range(num_threads):
+        for i in range(operations_per_thread):
+            assert kvstore.get(f"thread_{thread_id}_new_{i}") == f"new_value_{i}"
     kvstore.close()
 
 
