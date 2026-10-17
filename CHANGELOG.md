@@ -1,6 +1,9 @@
 # Changelog
 
-## Unreleased
+## 0.5.0 (2026-10-17)
+
+Improve data integrity, thread safety, error recovery, and portability while keeping
+the dependency-free, single-module runtime and existing database format.
 
 ### Compatibility
 
@@ -23,12 +26,15 @@
   A decoder failure during `pop()` preserves the entry.
 - Initialize empty database files and coordinate concurrent first opens.
 - Close failed constructor connections and preserve context-body exceptions on cleanup failure.
+- Make `close()` idempotent and coordinate it with active database operations.
 - Add keyword-only `timeout` and `synchronous` constructor settings.
 - Add `wipe(vacuum=False)`; default vacuum failures report that deletion already committed.
 - Accept general mappings in `set_many()` and preserve last-value-wins batch semantics.
 - Ship public type stubs and enforce strict type checks and stub/runtime consistency.
 - Add deterministic failure/concurrency tests, full branch coverage enforcement,
   Linux/Windows/macOS CI, and isolated wheel/sdist install checks.
+- Synchronize threaded test starts and keep disk workloads small so concurrency
+  checks do not depend on filesystem throughput.
 
 The database format remains compatible with 0.4.0. WAL retains the historical
 NORMAL synchronous default; select FULL explicitly for stronger power-loss durability.
