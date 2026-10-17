@@ -10,7 +10,7 @@ from numbers import Real
 from types import TracebackType
 from typing import Any, Literal, Self, TypeAlias, cast
 
-__version__ = "0.4.0"
+__version__ = "0.5.0"
 __all__ = ["SQLiteKVStore"]
 
 SQLiteKey: TypeAlias = str | bytes | int | float
