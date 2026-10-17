@@ -4,6 +4,9 @@ These notes are to help me remember how to work on the project.
 
 ## Setup
 
+Use Python 3.12 or newer. See [the robustness design spec](DESIGN.md) for the
+implementation sequence, behavioral contracts, and acceptance criteria.
+
 Install [uv](https://docs.astral.sh/uv/getting-started/installation/) (used to manage dependencies and publishing):
 
 ```bash
@@ -31,15 +34,49 @@ Run tests:
 uv run pytest --cov
 ```
 
-## Thread Safety
+## Quality checks
 
-The `SQLiteKVStore` class is thread-safe. Multiple threads can safely read and write to the same store instance concurrently.
+```bash
+uv run mypy sqlitekvstore.py
+uv run mypy tests/typing_examples.py
+uv run python -m mypy.stubtest sqlitekvstore
+uv run pytest --cov=sqlitekvstore --cov-branch
+uv build --out-dir artifacts
+uv run python scripts/check_distribution.py artifacts
+```
 
-Implementation details:
-- Uses `check_same_thread=False` when creating SQLite connections to allow multi-threaded access
-- All database operations are protected by a `threading.Lock()` to serialize access
-- Each method (`get`, `set`, `delete`, `keys`, `values`, `items`, etc.) is individually atomic
-- Note: There is no snapshot isolation across separate method calls. If you call `keys()` then `values()` while another thread is writing, the counts may differ.
+Use an empty artifact directory for the distribution check. It installs the wheel
+and sdist into separate temporary environments and checks persistence and installed
+annotations from outside the checkout. Keep `sqlitekvstore.pyi` aligned with the
+runtime API; it provides type information for this single-module distribution.
+The wheel installs the stub as `sqlitekvstore-stubs/__init__.pyi` so type checkers
+can discover it in site-packages, following the [stub-package convention](https://peps.python.org/pep-0561/#stub-only-packages). The runtime implementation remains in
+`sqlitekvstore.py`.
+
+The test matrix covers Linux on Python 3.12–3.14 and Windows/macOS on 3.12 and
+3.14. The quality job enforces lint, formatting, strict mypy, stub consistency,
+100% statement/branch coverage, and built distribution checks. Repository
+administrators should require these jobs in branch protection before release.
+
+Tests that can deadlock run in bounded subprocesses. Coverage instruments those
+subprocesses as well. Worker waits/joins have deadlines, spawned processes open
+independent stores, and fixtures close stores before deleting temporary files.
+
+## Thread safety and transactions
+
+One lock protects each instance's connection. Compound mutations use explicit
+SQLite transactions, so separate instances/processes also coordinate correctly.
+Private helpers called under the lock never acquire it recursively. Callbacks
+normally run outside the lock; `pop()` decodes inside its write transaction to
+preserve entries on failure. Callbacks must be thread-safe and must not reenter
+the store or wait on other operations on the database. Raw connections are
+caller-managed. See README.md for the public lifetime and concurrency contracts.
+
+Each mutation owns a `BEGIN IMMEDIATE` transaction and commits or rolls back before
+returning. No helper adopts an external transaction. Rollback failure invalidates
+the store, preserves the primary exception, and attaches cleanup context. The
+connection explicitly uses legacy transaction control with implicit transactions
+disabled; raw SQL requires an explicit BEGIN when grouping writes.
 
 ## Release
 

@@ -1,266 +1,375 @@
-"""Simple key-value store using sqlite3"""
+"""A dependency-free persistent key-value store for Python 3.12 and newer."""
 
 import contextlib
-import os.path
+import math
+import os
 import sqlite3
 import threading
-from typing import Callable, Dict, Generator, Iterable, Optional, Tuple, TypeVar, Union
-
-# keep mypy happy, keys/values can be any type supported by SQLite
-T = TypeVar("T")
+from collections.abc import Callable, Iterable, Iterator, Mapping
+from numbers import Real
+from types import TracebackType
+from typing import Any, Literal, Self, TypeAlias, cast
 
 __version__ = "0.4.0"
-
 __all__ = ["SQLiteKVStore"]
+
+SQLiteKey: TypeAlias = str | bytes | int | float
+Path: TypeAlias = str | os.PathLike[str]
 
 
 class SQLiteKVStore:
-    """Simple Key-Value Store that uses sqlite3 database as backend"""
+    """A small SQLite store with atomic mutations and per-instance thread locking.
+
+    Callbacks must be thread-safe and must not reenter this instance or wait for
+    other operations on this database. Open a separate instance in each process.
+    """
 
     def __init__(
         self,
-        dbpath: str,
-        serialize: Optional[Callable[[T], T]] = None,
-        deserialize: Optional[Callable[[T], T]] = None,
+        dbpath: Path,
+        serialize: Callable[[Any], Any] | None = None,
+        deserialize: Callable[[Any], Any] | None = None,
         wal: bool = False,
-    ):
-        """Opens the database if it exists, otherwise creates it
+        *,
+        timeout: float = 5.0,
+        synchronous: Literal["NORMAL", "FULL", "EXTRA"] | None = None,
+    ) -> None:
+        """Open a valid store or initialize an empty database.
 
-        Args:
-            dbpath: path to the database
-            serialize: optional function to serialize values on set
-            deserialize: optional function to deserialize values on get
-            wal: enable write-ahead logging which may offer significant speed boost;
-                once enabled, WAL mode will not be disabled, even if wal=False
+        timeout controls SQLite lock waiting, not an overall operation deadline.
+        wal=False leaves an existing journal mode unchanged. wal=True defaults
+        to synchronous=NORMAL; select FULL for stronger WAL power-loss durability.
+        The original path object is available through the path property.
         """
-
-        if serialize and not callable(serialize):
-            raise TypeError("serialize must be callable")
-        if deserialize and not callable(deserialize):
-            raise TypeError("deserialize must be callable")
-
+        self._lock = threading.Lock()
+        self._callback_state = threading.local()
+        self._conn: sqlite3.Connection | None = None
+        self._closed = True
         self._dbpath = dbpath
         self._serialize_func = serialize
         self._deserialize_func = deserialize
-        self._lock = threading.Lock()
-        self._conn = (
-            sqlite3.connect(dbpath, check_same_thread=False)
-            if os.path.exists(dbpath)
-            else self._create_database(dbpath)
+
+        for name, callback in (("serialize", serialize), ("deserialize", deserialize)):
+            if callback is not None and not callable(callback):
+                raise TypeError(f"{name} must be callable or None")
+        if isinstance(timeout, bool) or not isinstance(timeout, Real):
+            raise TypeError("timeout must be a finite nonnegative real number")
+        if not math.isfinite(timeout) or timeout < 0:
+            raise ValueError("timeout must be finite and nonnegative")
+        if synchronous is not None and (
+            not isinstance(synchronous, str) or synchronous not in ("NORMAL", "FULL", "EXTRA")
+        ):
+            raise ValueError("synchronous must be None, NORMAL, FULL, or EXTRA")
+        if sqlite3.threadsafety == 0:
+            raise sqlite3.NotSupportedError("SQLite must support multithreaded use")
+
+        conn = sqlite3.connect(
+            dbpath,
+            timeout=float(timeout),
+            check_same_thread=False,
+            autocommit=sqlite3.LEGACY_TRANSACTION_CONTROL,
+            isolation_level=None,
+        )
+        try:
+            self._initialize(conn)
+            if wal:
+                mode = self._fetchone(conn, "PRAGMA journal_mode=WAL;")
+                if mode != ("wal",) and not (
+                    os.fspath(dbpath) == ":memory:" and mode == ("memory",)
+                ):
+                    raise sqlite3.OperationalError("Unable to activate WAL journal mode")
+            effective_sync = synchronous if synchronous is not None else "NORMAL" if wal else None
+            if effective_sync is not None:
+                level = {"NORMAL": 1, "FULL": 2, "EXTRA": 3}[effective_sync]
+                self._execute(conn, f"PRAGMA synchronous={level};")
+        except BaseException as error:
+            try:
+                conn.close()
+            except BaseException as cleanup:
+                error.add_note(f"Initialization cleanup failed ({type(cleanup).__name__})")
+            raise
+        self._conn = conn
+        self._closed = False
+
+    @staticmethod
+    def _execute(conn: sqlite3.Connection, sql: str, params: tuple[Any, ...] = ()) -> int:
+        with contextlib.closing(conn.execute(sql, params)) as cursor:
+            return cursor.rowcount
+
+    @staticmethod
+    def _fetchone(
+        conn: sqlite3.Connection, sql: str, params: tuple[Any, ...] = ()
+    ) -> tuple[Any, ...] | None:
+        with contextlib.closing(conn.execute(sql, params)) as cursor:
+            return cast(tuple[Any, ...] | None, cursor.fetchone())
+
+    @staticmethod
+    def _fetchall(conn: sqlite3.Connection, sql: str) -> list[tuple[Any, ...]]:
+        with contextlib.closing(conn.execute(sql)) as cursor:
+            return cursor.fetchall()
+
+    @classmethod
+    def _schema_empty(cls, conn: sqlite3.Connection) -> bool:
+        return (
+            cls._fetchone(
+                conn, "SELECT 1 FROM sqlite_master WHERE name NOT GLOB 'sqlite_*' LIMIT 1;"
+            )
+            is None
         )
 
-        if wal:
-            self._conn.execute("PRAGMA journal_mode=WAL;")
-            self._conn.execute("PRAGMA synchronous=NORMAL;")
-            self._conn.commit()
+    def _initialize(self, conn: sqlite3.Connection) -> None:
+        if self._schema_empty(conn):
+            with self._transaction(conn):
+                # Another opener may have created the schema while BEGIN waited.
+                if self._schema_empty(conn):
+                    self._execute(
+                        conn, "CREATE TABLE _about (id INTEGER PRIMARY KEY, description TEXT);"
+                    )
+                    self._execute(
+                        conn, "CREATE TABLE data (key BLOB PRIMARY KEY NOT NULL, value BLOB);"
+                    )
+                    self._execute(conn, "CREATE UNIQUE INDEX idx_key ON data (key);")
+                self._validate_schema(conn)
+        else:
+            self._validate_schema(conn)
 
-    def _create_database(self, dbpath: str):
-        """Create the key-value database"""
-        conn = sqlite3.connect(dbpath, check_same_thread=False)
-        cursor = conn.cursor()
-        cursor.execute(
-            """CREATE TABLE IF NOT EXISTS _about (
-                id INTEGER PRIMARY KEY,
-                description TEXT);
-            """
-        )
-        cursor.execute(
-            """CREATE TABLE IF NOT EXISTS
-            data (key BLOB PRIMARY KEY NOT NULL, value BLOB);"""
-        )
-        cursor.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_key ON data (key);")
-        conn.commit()
-        return conn
+    def _validate_schema(self, conn: sqlite3.Connection) -> None:
+        expected = {
+            "data": [("key", "BLOB", 1, 1), ("value", "BLOB", 0, 0)],
+            "_about": [("id", "INTEGER", 0, 1), ("description", "TEXT", 0, 0)],
+        }
+        for table, columns in expected.items():
+            kind = self._fetchone(conn, "SELECT type FROM sqlite_master WHERE name = ?;", (table,))
+            # table_xinfo includes hidden/generated columns, which are not supported.
+            rows = self._fetchall(conn, f'PRAGMA table_xinfo("{table}");')
+            if not rows:
+                # Older SQLite builds lack table_xinfo and generated columns.
+                rows = [(*row, 0) for row in self._fetchall(conn, f'PRAGMA table_info("{table}");')]
+            actual = [(r[1], r[2].upper(), r[3], r[5]) for r in rows]
+            if kind != ("table",) or actual != columns or any(r[6] for r in rows):
+                raise sqlite3.DatabaseError(f"Incompatible SQLiteKVStore schema: {table}")
+
+    def _check_callback(self) -> None:
+        if getattr(self._callback_state, "active", False):
+            raise sqlite3.ProgrammingError("Callbacks must not reenter the same SQLiteKVStore")
+
+    @contextlib.contextmanager
+    def _locked(self) -> Iterator[sqlite3.Connection]:
+        self._check_callback()
+        with self._lock:
+            if self._closed or self._conn is None:
+                raise sqlite3.ProgrammingError("SQLiteKVStore is closed or invalidated")
+            if self._conn.in_transaction:
+                raise sqlite3.ProgrammingError(
+                    "Finish the external transaction before store operations"
+                )
+            yield self._conn
+
+    @contextlib.contextmanager
+    def _transaction(self, conn: sqlite3.Connection) -> Iterator[None]:
+        if conn.in_transaction:
+            raise sqlite3.ProgrammingError("Cannot adopt an external transaction")
+        self._execute(conn, "BEGIN IMMEDIATE;")
+        try:
+            yield
+            conn.commit()
+        except BaseException as error:
+            try:
+                if conn.in_transaction:
+                    conn.rollback()
+            except BaseException as cleanup:
+                error.add_note(f"Transaction rollback failed ({type(cleanup).__name__})")
+                self._closed = True
+                try:
+                    conn.close()
+                except BaseException as close_error:
+                    error.add_note(f"Connection cleanup failed ({type(close_error).__name__})")
+            raise
+
+    def _callback(self, func: Callable[[Any], Any] | None, value: Any) -> Any:
+        if func is None:
+            return value
+        self._callback_state.active = True
+        try:
+            return func(value)
+        finally:
+            self._callback_state.active = False
 
     def connection(self) -> sqlite3.Connection:
-        """Return connection to underlying sqlite3 database"""
-        return self._conn
+        """Return the raw, caller-managed connection, even after close.
 
-    def set(self, key: T, value: T):
-        """Set key:value pair"""
-        serialized_value = self._serialize(value)
-        with self._lock:
-            conn = self.connection()
-            cursor = conn.cursor()
-            cursor.execute("INSERT OR REPLACE INTO data VALUES (?, ?);", (key, serialized_value))
-            conn.commit()
-
-    def set_many(self, items: Union[Iterable[Tuple[T, T]], Dict[T, T]]):
-        """Set multiple key:value pairs
-
-        Args:
-            items: iterable of (key, value) tuples or dictionary of key:value pairs
+        Arrange exclusive access and finish transactions before using the store
+        again. Raw writes outside an explicit BEGIN commit immediately.
         """
-        _items = items.items() if isinstance(items, dict) else items
-        serialized_items = [(key, self._serialize(value)) for key, value in _items]
+        self._check_callback()
         with self._lock:
-            conn = self.connection()
-            cursor = conn.cursor()
-            cursor.executemany(
-                "INSERT OR REPLACE INTO data VALUES (?, ?);",
-                serialized_items,
+            if self._conn is None:
+                raise sqlite3.ProgrammingError("SQLiteKVStore has no connection")
+            return self._conn
+
+    def set(self, key: Any, value: Any) -> None:
+        """Set a value, committing atomically before returning."""
+        with self._locked():
+            pass
+        value = self._callback(self._serialize_func, value)
+        with self._locked() as conn, self._transaction(conn):
+            self._execute(
+                conn, "INSERT OR REPLACE INTO data (key, value) VALUES (?, ?);", (key, value)
             )
-            conn.commit()
 
-    def get(self, key: T, default: Optional[T] = None) -> Optional[T]:
-        """Get value for key
+    def set_many(self, items: Mapping[Any, Any] | Iterable[tuple[Any, Any]]) -> None:
+        """Commit a whole batch or none of it; materializes input before writing.
 
-        Args:
-            key: key to get from key-value store
-            default: optional default value to return if key not found
-
-        Returns: value for key or default
-
-        Note: does not insert key:default into database if key does not exist
+        Duplicate keys retain their last value. Memory use scales with the batch.
         """
-        try:
-            return self._get(key)
-        except KeyError:
-            return default
+        with self._locked():
+            pass
+        source = items.items() if isinstance(items, Mapping) else items
+        values = [(key, self._callback(self._serialize_func, value)) for key, value in source]
+        with self._locked() as conn:
+            if values:
+                with self._transaction(conn), contextlib.closing(conn.cursor()) as cursor:
+                    cursor.executemany(
+                        "INSERT OR REPLACE INTO data (key, value) VALUES (?, ?);", values
+                    )
 
-    def delete(self, key: T):
-        """Delete key from key-value store"""
-        with self._lock:
-            conn = self.connection()
-            cursor = conn.cursor()
-            cursor.execute("DELETE FROM data WHERE key = ?;", (key,))
-            conn.commit()
+    def get(self, key: Any, default: Any = None) -> Any:
+        """Return default only for an absent key; decoding failures propagate."""
+        with self._locked() as conn:
+            row = self._fetchone(conn, "SELECT value FROM data WHERE key = ?;", (key,))
+        return default if row is None else self._callback(self._deserialize_func, row[0])
 
-    def pop(self, key) -> Optional[T]:
-        """Delete key and return value"""
-        value = self[key]
-        del self[key]
+    def delete(self, key: Any) -> None:
+        """Delete a key; absence is a successful no-op."""
+        with self._locked() as conn, self._transaction(conn):
+            self._execute(conn, "DELETE FROM data WHERE key = ?;", (key,))
+
+    def pop(self, key: Any) -> Any:
+        """Atomically decode and remove a key; decoding failure preserves it."""
+        with self._locked() as conn, self._transaction(conn):
+            row = self._fetchone(conn, "SELECT value FROM data WHERE key = ?;", (key,))
+            if row is None:
+                raise KeyError(key)
+            value = self._callback(self._deserialize_func, row[0])
+            self._execute(conn, "DELETE FROM data WHERE key = ?;", (key,))
         return value
 
-    def keys(self) -> Generator[T, None, None]:
-        """Return keys as generator"""
+    def keys(self) -> Iterator[SQLiteKey]:
+        """Iterate a snapshot taken on first advance, in unspecified order."""
         return iter(self)
 
-    def values(self) -> Generator[T, None, None]:
-        """Return values as generator"""
-        with self._lock:
-            conn = self.connection()
-            cursor = conn.cursor()
-            cursor.execute("SELECT value FROM data;")
-            results = cursor.fetchall()
-        for value in results:
-            yield self._deserialize(value[0])
+    def values(self) -> Iterator[Any]:
+        """Fetch raw values on first advance, then decode while yielding."""
+        with self._locked() as conn:
+            rows = self._fetchall(conn, "SELECT value FROM data;")
+        for row in rows:
+            yield self._callback(self._deserialize_func, row[0])
 
-    def items(self) -> Generator[Tuple[T, T], None, None]:
-        """Return items (key, value) as generator"""
-        with self._lock:
-            conn = self.connection()
-            cursor = conn.cursor()
-            cursor.execute("SELECT key, value FROM data;")
-            results = cursor.fetchall()
-        for key, value in results:
-            yield key, self._deserialize(value)
+    def items(self) -> Iterator[tuple[SQLiteKey, Any]]:
+        """Fetch a snapshot on first advance; memory use scales with the store."""
+        with self._locked() as conn:
+            rows = self._fetchall(conn, "SELECT key, value FROM data;")
+        for key, value in rows:
+            yield key, self._callback(self._deserialize_func, value)
 
-    def close(self):
-        """Close the database"""
+    def close(self) -> None:
+        """Close once, coordinating with active database operations."""
+        self._check_callback()
         with self._lock:
-            self.connection().close()
+            if not self._closed and self._conn is not None:
+                self._conn.close()
+                self._closed = True
 
     @property
     def about(self) -> str:
-        """Return description for the database"""
-        with self._lock:
-            results = (
-                self.connection().cursor().execute("SELECT description FROM _about;").fetchone()
-            )
-        return results[0] if results else ""
+        """Return the database description, or an empty string if unset."""
+        with self._locked() as conn:
+            row = self._fetchone(conn, "SELECT description FROM _about WHERE id = 1;")
+        return cast(str, row[0]) if row is not None else ""
 
     @about.setter
-    def about(self, description: str):
-        """Set description of the database"""
-        with self._lock:
-            conn = self.connection()
-            cursor = conn.cursor()
-            cursor.execute(
-                "INSERT OR REPLACE INTO _about VALUES (?, ?);",
-                (
-                    1,
-                    description,
-                ),
+    def about(self, description: str) -> None:
+        with self._locked() as conn, self._transaction(conn):
+            self._execute(
+                conn,
+                "INSERT OR REPLACE INTO _about (id, description) VALUES (1, ?);",
+                (description,),
             )
-            conn.commit()
 
     @property
-    def path(self) -> str:
-        """Return path to the database"""
+    def path(self) -> Path:
+        """Return the original path argument, including after close."""
         return self._dbpath
 
-    def wipe(self):
-        """Wipe the database"""
-        with self._lock:
-            self.connection().execute("DELETE FROM data;")
-            self.connection().commit()
-        self.vacuum()
+    def wipe(self, *, vacuum: bool = True) -> None:
+        """Commit deletion of all entries, then optionally vacuum.
 
-    def vacuum(self):
-        """Vacuum the database, ref: https://www.sqlite.org/matrix/lang_vacuum.html"""
-        with self._lock:
-            self.connection().execute("VACUUM;")
+        If vacuum fails, deletion has already committed. Metadata is preserved.
+        """
+        with self._locked() as conn:
+            with self._transaction(conn):
+                self._execute(conn, "DELETE FROM data;")
+            if vacuum:
+                try:
+                    self._execute(conn, "VACUUM;")
+                except BaseException as error:
+                    error.add_note("wipe() deletion already committed; vacuum failed")
+                    raise
 
-    def _get(self, key: T) -> T:
-        """Get value for key or raise KeyError if key not found"""
-        with self._lock:
-            cursor = self.connection().cursor()
-            cursor.execute("SELECT value FROM data WHERE key = ?;", (key,))
-            result = cursor.fetchone()
-        if result:
-            return self._deserialize(result[0])
-        raise KeyError(key)
+    def vacuum(self) -> None:
+        """Reclaim unused database space outside a transaction."""
+        with self._locked() as conn:
+            self._execute(conn, "VACUUM;")
 
-    def _serialize(self, value: T) -> T:
-        """Serialize value using serialize function if provided"""
-        return self._serialize_func(value) if self._serialize_func else value
+    def __getitem__(self, key: Any) -> Any:
+        with self._locked() as conn:
+            row = self._fetchone(conn, "SELECT value FROM data WHERE key = ?;", (key,))
+        if row is None:
+            raise KeyError(key)
+        return self._callback(self._deserialize_func, row[0])
 
-    def _deserialize(self, value: T) -> T:
-        """Deserialize value using deserialize function if provided"""
-        return self._deserialize_func(value) if self._deserialize_func else value
-
-    def __getitem__(self, key: T) -> T:
-        return self._get(key)
-
-    def __setitem__(self, key: T, value: T):
+    def __setitem__(self, key: Any, value: Any) -> None:
         self.set(key, value)
 
-    def __delitem__(self, key: T):
-        # try to get the key which will raise KeyError if key does not exist
-        if key in self:
-            self.delete(key)
-        else:
-            raise KeyError(key)
+    def __delitem__(self, key: Any) -> None:
+        with self._locked() as conn, self._transaction(conn):
+            if self._execute(conn, "DELETE FROM data WHERE key = ?;", (key,)) == 0:
+                raise KeyError(key)
 
-    def __iter__(self):
-        with self._lock:
-            cursor = self.connection().cursor()
-            cursor.execute("SELECT key FROM data;")
-            results = cursor.fetchall()
-        for key in results:
-            yield key[0]
+    def __iter__(self) -> Iterator[SQLiteKey]:
+        with self._locked() as conn:
+            rows = self._fetchall(conn, "SELECT key FROM data;")
+        for row in rows:
+            yield row[0]
 
-    def __contains__(self, key: T) -> bool:
-        # Implement in operator, don't use _get to avoid deserializing value unnecessarily
-        with self._lock:
-            cursor = self.connection().cursor()
-            cursor.execute("SELECT 1 FROM data WHERE key = ?;", (key,))
-            return bool(cursor.fetchone())
+    def __contains__(self, key: Any) -> bool:
+        with self._locked() as conn:
+            return self._fetchone(conn, "SELECT 1 FROM data WHERE key = ?;", (key,)) is not None
 
-    def __enter__(self):
+    def __enter__(self) -> Self:
+        with self._locked():
+            pass
         return self
 
-    def __exit__(self, exc_type, exc_value, exc_traceback):
-        self.close()
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_value: BaseException | None,
+        exc_traceback: TracebackType | None,
+    ) -> None:
+        try:
+            self.close()
+        except BaseException as cleanup:
+            if exc_value is None:
+                raise
+            exc_value.add_note(f"Store cleanup failed ({type(cleanup).__name__})")
 
-    def __len__(self):
-        with self._lock:
-            cursor = self.connection().cursor()
-            cursor.execute("SELECT COUNT(*) FROM data;")
-            return cursor.fetchone()[0]
+    def __len__(self) -> int:
+        with self._locked() as conn:
+            row = self._fetchone(conn, "SELECT COUNT(*) FROM data;")
+        return cast(tuple[int], row)[0]
 
-    def __del__(self):
-        """Try to close the database in case it wasn't already closed. Don't count on this!"""
+    def __del__(self) -> None:
+        # Partial construction and interpreter teardown must not raise.
         with contextlib.suppress(Exception):
             self.close()

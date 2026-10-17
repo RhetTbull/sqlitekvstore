@@ -262,7 +262,7 @@ def test_wipe(tmpdir):
     assert len(kvstore) == 4
     kvstore.wipe()
     assert len(kvstore) == 0
-    assert "foo"
+    assert "foo" not in kvstore
     kvstore.set("foo", "bar")
     assert kvstore.get("foo") == "bar"
 
@@ -288,7 +288,8 @@ def test_thread_safety_concurrent_writes(tmpdir):
     for t in threads:
         t.start()
     for t in threads:
-        t.join()
+        t.join(timeout=10)
+        assert not t.is_alive(), "worker did not finish"
 
     assert len(errors) == 0, f"Errors occurred: {errors}"
     assert len(kvstore) == num_threads * writes_per_thread
@@ -339,7 +340,8 @@ def test_thread_safety_concurrent_reads_and_writes(tmpdir):
     for t in threads:
         t.start()
     for t in threads:
-        t.join()
+        t.join(timeout=10)
+        assert not t.is_alive(), "worker did not finish"
 
     assert len(errors) == 0, f"Errors occurred: {errors}"
     kvstore.close()
@@ -367,7 +369,8 @@ def test_thread_safety_concurrent_set_many(tmpdir):
     for t in threads:
         t.start()
     for t in threads:
-        t.join()
+        t.join(timeout=10)
+        assert not t.is_alive(), "worker did not finish"
 
     assert len(errors) == 0, f"Errors occurred: {errors}"
     assert len(kvstore) == num_threads * items_per_batch
@@ -408,7 +411,8 @@ def test_thread_safety_concurrent_deletes(tmpdir):
     for t in threads:
         t.start()
     for t in threads:
-        t.join()
+        t.join(timeout=10)
+        assert not t.is_alive(), "worker did not finish"
 
     assert len(errors) == 0, f"Errors occurred: {errors}"
     assert len(kvstore) == 0
@@ -452,8 +456,10 @@ def test_thread_safety_iteration_during_writes(tmpdir):
     writer_thread.start()
     reader_thread.start()
 
-    writer_thread.join()
-    reader_thread.join()
+    writer_thread.join(timeout=10)
+    assert not writer_thread.is_alive(), "writer did not finish"
+    reader_thread.join(timeout=10)
+    assert not reader_thread.is_alive(), "reader did not finish"
 
     assert len(errors) == 0, f"Errors occurred: {errors}"
     # Verify final state: should have 50 initial + 100 new = 150 items

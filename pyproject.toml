@@ -9,12 +9,10 @@ description = "Simple key-value store backed by sqlite"
 authors = [{name = "Rhet Turnbull", email = "rturnbull+git@gmail.com"}]
 readme = "README.md"
 license = {file = "LICENSE"}
-requires-python = ">=3.9"
+requires-python = ">=3.12"
 classifiers = [
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.10",
-    "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3.14",
@@ -26,16 +24,39 @@ Home = "https://github.com/RhetTbull/sqlitekvstore"
 [dependency-groups]
 dev = [
     "bump2version",
+    "mypy>=2.4.0",
     "pytest>=8.0.0",
-    "pytest-cov>=4.0.0",
+    "pytest-cov>=7.0.0",
+    "coverage>=7.10",
     "ruff>=0.4.0",
 ]
 
 [tool.pytest.ini_options]
-testpaths = ["test_sqlitekvstore.py"]
+testpaths = ["test_sqlitekvstore.py", "tests"]
+filterwarnings = ["error::ResourceWarning"]
 
 [tool.ruff]
 line-length = 100
+target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "W"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+
+[tool.hatch.build.targets.wheel]
+only-include = ["sqlitekvstore.py"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"sqlitekvstore.pyi" = "sqlitekvstore-stubs/__init__.pyi"
+
+[tool.coverage.run]
+source = ["sqlitekvstore"]
+branch = true
+patch = ["subprocess"]
+
+[tool.coverage.report]
+fail_under = 100
+show_missing = true
